@@ -22,8 +22,8 @@ export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="hidden w-[280px] shrink-0 border-r border-white/10 bg-white/[0.05] px-5 py-6 backdrop-blur-2xl md:block">
-      <div className="mb-10 rounded-[28px] border border-white/10 bg-white/[0.07] p-5 shadow-[0_20px_60px_rgba(0,0,0,0.25)]">
+    <aside className="hidden w-[280px] shrink-0 border-r border-white/10 bg-white/[0.055]/[0.05] px-5 py-6 backdrop-blur-2xl md:block">
+      <div className="mb-10 rounded-[28px] border border-white/10 bg-white/[0.055]/[0.045] p-5 shadow-[0_20px_60px_rgba(0,0,0,0.25)]">
         <p className="text-[11px] font-semibold uppercase tracking-[0.32em] text-cyan-200/70">
           Financeiro
         </p>
@@ -48,7 +48,7 @@ export function Sidebar() {
                 "group flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition",
                 isActive
                   ? "bg-gradient-to-r from-fuchsia-600/80 to-cyan-500/80 text-white shadow-[0_14px_35px_rgba(34,211,238,0.18)]"
-                  : "text-white/58 hover:bg-white/[0.08] hover:text-white",
+                  : "text-white/58 hover:bg-white/[0.055]/[0.055] hover:text-white",
               ].join(" ")}
             >
               <Icon className="h-4 w-4" />
@@ -65,4 +65,6 @@ export function Sidebar() {
     </aside>
   );
 }
+
+
 

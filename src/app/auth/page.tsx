@@ -50,7 +50,7 @@ export default function AuthPage() {
         <div className="pointer-events-none absolute -left-10 top-16 z-0 h-28 w-2 rounded-full bg-cyan-300/70 blur-md" />
         <div className="pointer-events-none absolute -right-8 bottom-16 z-0 h-28 w-2 rounded-full bg-fuchsia-400/70 blur-md" />
 
-        <div className="relative z-10 overflow-hidden rounded-[40px] border border-white/20 bg-white/[0.08] p-8 shadow-[0_35px_120px_rgba(0,0,0,0.62)] backdrop-blur-3xl before:pointer-events-none before:absolute before:inset-0 before:z-0 before:rounded-[40px] before:bg-[linear-gradient(135deg,rgba(255,255,255,0.24),rgba(255,255,255,0.04)_38%,rgba(255,255,255,0.12)_100%)] before:content-[''] after:pointer-events-none after:absolute after:inset-px after:z-0 after:rounded-[39px] after:border after:border-white/10 after:content-['']">
+        <div className="relative z-10 overflow-hidden rounded-[40px] border border-white/20 bg-white/[0.055]/[0.055] p-8 shadow-[0_35px_120px_rgba(0,0,0,0.62)] backdrop-blur-3xl before:pointer-events-none before:absolute before:inset-0 before:z-0 before:rounded-[40px] before:bg-[linear-gradient(135deg,rgba(255,255,255,0.24),rgba(255,255,255,0.04)_38%,rgba(255,255,255,0.12)_100%)] before:content-[''] after:pointer-events-none after:absolute after:inset-px after:z-0 after:rounded-[39px] after:border after:border-white/10 after:content-['']">
           <div className="pointer-events-none absolute -left-16 -top-20 z-0 h-56 w-56 rounded-full bg-fuchsia-500/20 blur-3xl" />
           <div className="pointer-events-none absolute -bottom-24 -right-20 z-0 h-64 w-64 rounded-full bg-cyan-300/20 blur-3xl" />
 
@@ -96,7 +96,7 @@ export default function AuthPage() {
                   type="checkbox"
                   checked={remember}
                   onChange={(e) => setRemember(e.target.checked)}
-                  className="h-3.5 w-3.5 rounded border-white/30 bg-white/10 accent-fuchsia-400"
+                  className="h-3.5 w-3.5 rounded border-white/30 bg-white/[0.055]/10 accent-fuchsia-400"
                 />
                 Lembrar acesso
               </label>
@@ -121,3 +121,5 @@ export default function AuthPage() {
     </main>
   );
 }
+
+

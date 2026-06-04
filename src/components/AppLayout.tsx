@@ -58,7 +58,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       <div className="relative flex min-h-screen">
         <Sidebar />
         <section className="flex-1 p-4 md:p-6 lg:p-8">
-          <div className="min-h-[calc(100vh-4rem)] rounded-[32px] border border-white/10 bg-white/[0.06] p-4 shadow-[0_28px_90px_rgba(0,0,0,0.35)] backdrop-blur-2xl md:p-6 lg:p-8">
+          <div className="min-h-[calc(100vh-4rem)] rounded-[34px] border border-white/10 bg-white/[0.055]/[0.045] p-4 shadow-[0_28px_90px_rgba(0,0,0,0.35)] backdrop-blur-2xl md:p-6 lg:p-8">
             {children}
           </div>
         </section>
@@ -66,3 +66,5 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     </main>
   );
 }
+
+

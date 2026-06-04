@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+﻿import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 
 export async function POST(req: Request) {
@@ -20,13 +20,13 @@ export async function POST(req: Request) {
       subject: `Sua Nota Fiscal - Kaff Co.`,
       html: `
         <div style="font-family: Arial, sans-serif; color: #333; max-w: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
-          <h2 style="color: #2563eb;">Olá, ${nomeCliente || 'Cliente'}!</h2>
+          <h2 style="color: #2563eb;">OlÃ¡, ${nomeCliente || 'Cliente'}!</h2>
           <p>Agradecemos a sua parceria. O pagamento no valor de <strong>R$ ${valor}</strong> foi processado.</p>
-          <p>Sua Nota Fiscal já foi emitida e está disponível para download no link abaixo:</p>
+          <p>Sua Nota Fiscal jÃ¡ foi emitida e estÃ¡ disponÃ­vel para download no link abaixo:</p>
           <div style="text-align: center; margin: 30px 0;">
             <a href="${anexoUrl}" style="background-color: #2563eb; color: #fff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Baixar Nota Fiscal</a>
           </div>
-          <p style="font-size: 12px; color: #777;">Se você tiver alguma dúvida, basta responder a este e-mail.</p>
+          <p style="font-size: 12px; color: #777;">Se vocÃª tiver alguma dÃºvida, basta responder a este e-mail.</p>
         </div>
       `,
     };
@@ -38,3 +38,4 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Erro ao enviar email' }, { status: 500 });
   }
 }
+
