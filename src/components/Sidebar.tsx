@@ -1,65 +1,67 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, ReceiptText, Settings, UsersRound, Package } from "lucide-react";
+import {
+  ChartNoAxesCombined,
+  CircleDollarSign,
+  Settings,
+  UserRound,
+  WalletCards,
+} from "lucide-react";
 
 const links = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/registros", label: "Registros", icon: ReceiptText },
-  { href: "/clientes", label: "Clientes", icon: UsersRound },
-  { href: "/produtos", label: "Produtos", icon: Package },
+  { href: "/", label: "Visão Geral", icon: ChartNoAxesCombined },
+  { href: "/registros", label: "Movimentações", icon: CircleDollarSign },
+  { href: "/clientes", label: "Pessoas", icon: UserRound },
+  { href: "/produtos", label: "Categorias", icon: WalletCards },
   { href: "/configuracoes", label: "Configurações", icon: Settings },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
-  
-  // URL PÚBLICA DA SUA LOGO NO SUPABASE
-  const LINK_DA_SUA_LOGO = "https://hvtwmsrjxuvwfibtsijd.supabase.co/storage/v1/object/public/avatars/logo.png"; 
 
   return (
-    <div className="w-64 min-h-screen bg-[#0a003d] border-r border-[#0a003d] p-6 flex flex-col font-sans">
-      
-      {/* AJUSTE: Container de logo centralizado horizontalmente */}
-      <div className="mb-12 flex justify-center items-center px-2 min-h-[56px] w-full">
-        {LINK_DA_SUA_LOGO ? (
-          // AJUSTE: Altura aumentada para 56px (h-14)
-          <img src={LINK_DA_SUA_LOGO} alt="Logo Kaff" className="h-14 w-auto object-contain" />
-        ) : (
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-[#ffab40] rounded flex items-center justify-center shrink-0">
-              <span className="text-[#0a003d] font-black text-lg">K</span>
-            </div>
-            <h2 className="text-lg font-bold text-white tracking-tight">Kaff ERP</h2>
-          </div>
-        )}
+    <aside className="hidden w-[280px] shrink-0 border-r border-white/10 bg-white/[0.05] px-5 py-6 backdrop-blur-2xl md:block">
+      <div className="mb-10 rounded-[28px] border border-white/10 bg-white/[0.07] p-5 shadow-[0_20px_60px_rgba(0,0,0,0.25)]">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.32em] text-cyan-200/70">
+          Financeiro
+        </p>
+        <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-white">
+          Meu Dinheiro PF
+        </h2>
+        <p className="mt-2 text-xs leading-5 text-white/50">
+          Controle pessoal moderno, simples e direto.
+        </p>
       </div>
-      
-      <nav className="space-y-1.5 flex-1">
+
+      <nav className="space-y-2">
         {links.map((link) => {
           const Icon = link.icon;
           const isActive = pathname === link.href;
+
           return (
-            <Link 
-              key={link.href} 
-              href={link.href} 
-              className={`flex items-center gap-3.5 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${
-                isActive 
-                  ? "bg-[#ffab40] text-[#0a003d] shadow-sm" 
-                  : "text-gray-400 hover:bg-white/5 hover:text-white"
-              }`}
+            <Link
+              key={link.href}
+              href={link.href}
+              className={[
+                "group flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition",
+                isActive
+                  ? "bg-gradient-to-r from-fuchsia-600/80 to-cyan-500/80 text-white shadow-[0_14px_35px_rgba(34,211,238,0.18)]"
+                  : "text-white/58 hover:bg-white/[0.08] hover:text-white",
+              ].join(" ")}
             >
-              <Icon size={18} strokeWidth={isActive ? 2.5 : 2} className={isActive ? "text-[#0a003d]" : "text-gray-400"} />
-              {link.label}
+              <Icon className="h-4 w-4" />
+              <span>{link.label}</span>
             </Link>
           );
         })}
       </nav>
-      
-      <div className="mt-auto pt-6 border-t border-white/10 px-2">
-        <p className="text-[11px] text-gray-500 font-medium uppercase tracking-wider">Kaff Co. Workspace</p>
+
+      <div className="absolute bottom-6 left-5 right-5 rounded-[24px] border border-white/10 bg-black/15 p-4 text-xs text-white/45">
+        <p className="font-medium text-white/70">Modo PF</p>
+        <p className="mt-1 leading-5">Organize entradas, saídas e metas pessoais.</p>
       </div>
-    </div>
+    </aside>
   );
 }

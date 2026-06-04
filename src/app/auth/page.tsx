@@ -1,104 +1,112 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { DollarSign, Loader2 } from "lucide-react";
+import { Loader2, Lock, Mail } from "lucide-react";
 
 export default function AuthPage() {
-  const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [nome, setNome] = useState("");
+  const [remember, setRemember] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const router = useRouter();
 
-  async function handleAuth(e: React.FormEvent) {
+  async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError("");
 
-    if (isLogin) {
-      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-      if (signInError) {
-        setError(signInError.message === 'Invalid login credentials' ? 'E-mail ou senha incorretos.' : signInError.message);
-      } else {
-        router.push("/");
-      }
-    } else {
-      // Cria a conta
-      const { data, error: signUpError } = await supabase.auth.signUp({ email, password });
-      if (signUpError) {
-        setError(signUpError.message);
-      } else if (data.user) {
-        // Salva o perfil
-        await supabase.from('perfis').insert([{ id: data.user.id, nome, funcao: 'Membro' }]);
-        // Como o 'Confirm Email' tá desativado, ele já tem a sessão ativa! Vai direto pro app:
-        router.push("/");
-      }
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (signInError) {
+      setError(
+        signInError.message === "Invalid login credentials"
+          ? "E-mail ou senha incorretos."
+          : signInError.message
+      );
+      setLoading(false);
+      return;
     }
-    setLoading(false);
+
+    router.push("/");
+    router.refresh();
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8 font-sans">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="flex justify-center">
-          <div className="w-14 h-14 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg">
-            <DollarSign size={32} />
-          </div>
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#090814] px-6 py-10 text-white">
+      <div className="pointer-events-none absolute -left-32 top-[-120px] h-96 w-96 rounded-full bg-fuchsia-600/30 blur-[120px]" />
+      <div className="pointer-events-none absolute bottom-[-140px] right-[-100px] h-[420px] w-[420px] rounded-full bg-cyan-400/30 blur-[130px]" />
+      <div className="pointer-events-none absolute left-1/2 top-1/2 h-[520px] w-[520px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-500/10 blur-[160px]" />
+
+      <section className="relative w-full max-w-[430px] rounded-[34px] border border-white/20 bg-white/[0.08] p-8 shadow-[0_30px_100px_rgba(0,0,0,0.55)] backdrop-blur-2xl">
+        <div className="mb-9 text-center">
+          <h1 className="text-3xl font-semibold tracking-[-0.04em] text-white">
+            Meu Dinheiro PF
+          </h1>
+          <p className="mt-3 text-sm text-white/65">
+            Acesse sua conta para continuar
+          </p>
         </div>
-        <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-          Kaff ERP
-        </h2>
-        <p className="mt-2 text-center text-sm text-gray-600">
-          {isLogin ? "Acesse sua conta para continuar" : "Crie sua conta para começar"}
-        </p>
-      </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white py-8 px-4 shadow sm:rounded-2xl sm:px-10 border border-gray-100">
-          <form className="space-y-6" onSubmit={handleAuth}>
-            {!isLogin && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Nome Completo</label>
-                <div className="mt-1">
-                  <input type="text" required className="appearance-none block w-full px-3 py-2.5 border border-gray-300 rounded-xl shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" value={nome} onChange={(e) => setNome(e.target.value)} />
-                </div>
-              </div>
-            )}
+        <form onSubmit={handleLogin} className="space-y-5">
+          <label className="group flex items-center gap-3 border-b border-white/35 px-1 pb-3 transition focus-within:border-cyan-300">
+            <Mail className="h-4 w-4 text-white/60 transition group-focus-within:text-cyan-200" />
+            <input
+              type="email"
+              required
+              autoComplete="email"
+              placeholder="E-mail"
+              className="w-full bg-transparent text-sm text-white outline-none placeholder:text-white/45"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </label>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700">E-mail</label>
-              <div className="mt-1">
-                <input type="email" required className="appearance-none block w-full px-3 py-2.5 border border-gray-300 rounded-xl shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" value={email} onChange={(e) => setEmail(e.target.value)} />
-              </div>
-            </div>
+          <label className="group flex items-center gap-3 border-b border-white/35 px-1 pb-3 transition focus-within:border-cyan-300">
+            <Lock className="h-4 w-4 text-white/60 transition group-focus-within:text-cyan-200" />
+            <input
+              type="password"
+              required
+              autoComplete="current-password"
+              placeholder="Senha"
+              className="w-full bg-transparent text-sm text-white outline-none placeholder:text-white/45"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </label>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Senha</label>
-              <div className="mt-1">
-                <input type="password" required className="appearance-none block w-full px-3 py-2.5 border border-gray-300 rounded-xl shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" value={password} onChange={(e) => setPassword(e.target.value)} />
-              </div>
-            </div>
-
-            {error && <div className="text-red-600 text-sm bg-red-50 p-3 rounded-lg">{error}</div>}
-
-            <div>
-              <button type="submit" disabled={loading} className="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-xl shadow-sm text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50">
-                {loading ? <Loader2 className="animate-spin" size={20} /> : isLogin ? "Entrar no sistema" : "Criar conta e Acessar"}
-              </button>
-            </div>
-          </form>
-
-          <div className="mt-6 border-t border-gray-100 pt-6 text-center">
-            <button onClick={() => setIsLogin(!isLogin)} type="button" className="text-sm font-medium text-blue-600 hover:text-blue-500">
-              {isLogin ? "Não tem uma conta? Cadastre-se" : "Já tem uma conta? Faça login"}
-            </button>
+          <div className="flex items-center justify-between pt-1 text-xs text-white/55">
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={remember}
+                onChange={(e) => setRemember(e.target.checked)}
+                className="h-3.5 w-3.5 rounded border-white/30 bg-white/10 accent-cyan-300"
+              />
+              Lembrar acesso
+            </label>
           </div>
-        </div>
-      </div>
-    </div>
+
+          {error && (
+            <div className="rounded-2xl border border-red-300/20 bg-red-500/10 px-4 py-3 text-center text-xs text-red-100">
+              {error}
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="mt-3 flex h-12 w-full items-center justify-center rounded-2xl bg-gradient-to-r from-fuchsia-600 via-purple-600 to-cyan-500 text-sm font-bold uppercase tracking-[0.22em] text-white shadow-[0_16px_45px_rgba(59,130,246,0.35)] transition hover:scale-[1.01] hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : "Entrar"}
+          </button>
+        </form>
+      </section>
+    </main>
   );
 }
