@@ -3,7 +3,7 @@ import "./globals.css";
 import { AppLayout } from "@/components/AppLayout";
 
 export const metadata: Metadata = {
-  title: "Meu Dinheiro PF",
+  title: "Kyra",
   description: "Controle financeiro pessoal moderno.",
 };
 
@@ -20,3 +20,4 @@ export default function RootLayout({
     </html>
   );
 }
+

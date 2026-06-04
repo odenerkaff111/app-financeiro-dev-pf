@@ -28,7 +28,7 @@ export function Sidebar() {
           Financeiro
         </p>
         <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-white">
-          Meu Dinheiro PF
+          Kyra
         </h2>
         <p className="mt-2 text-xs leading-5 text-white/50">
           Controle pessoal moderno, simples e direto.
@@ -65,3 +65,4 @@ export function Sidebar() {
     </aside>
   );
 }
+
