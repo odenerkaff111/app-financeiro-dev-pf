@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  financeiro-dashboard:
+    image: kaff-financeiro:v1
+    env_file:
+      - .env.local
+    networks:
+      - grupokaff
+    # Etiquetas para Docker padrão
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.financeiro.rule=Host(`financeiro-pj.grupokaff.fun`)"
+      - "traefik.http.routers.financeiro.entrypoints=websecure"
+      - "traefik.http.routers.financeiro.tls=true"
+      - "traefik.http.routers.financeiro.tls.certresolver=letsencryptresolver"
+      - "traefik.http.services.financeiro.loadbalancer.server.port=3000"
+    # Etiquetas para Docker Swarm
+    deploy:
+      mode: replicated
+      replicas: 1
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.financeiro.rule=Host(`financeiro-pj.grupokaff.fun`)"
+        - "traefik.http.routers.financeiro.entrypoints=websecure"
+        - "traefik.http.routers.financeiro.tls=true"
+        - "traefik.http.routers.financeiro.tls.certresolver=letsencryptresolver"
+        - "traefik.http.services.financeiro.loadbalancer.server.port=3000"
+        - "traefik.docker.network=grupokaff"
+
+networks:
+  grupokaff:
+    external: true
