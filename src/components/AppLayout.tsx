@@ -5,7 +5,6 @@ import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { getSessionOnce, supabase } from "@/lib/supabase";
 import { HouseholdProvider } from "@/contexts/HouseholdContext";
-import { AppHeader } from "./AppHeader";
 import { AppDock } from "./AppDock";
 
 export function AppLayout({
@@ -103,14 +102,8 @@ export function AppLayout({
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#F7F5EF] text-[#0D1B2A]">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-[#C8A15A]" />
-
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#0D1B2A]/60">
-            Preparando suas finanças
-          </p>
-        </div>
+      <div className="flex min-h-screen items-center justify-center bg-[#F7F5EF]">
+        <Loader2 className="h-8 w-8 animate-spin text-[#C8A15A]" />
       </div>
     );
   }
@@ -126,22 +119,16 @@ export function AppLayout({
   return (
     <HouseholdProvider>
       <main className="relative min-h-screen overflow-x-hidden bg-[#F7F5EF] text-[#0D1B2A]">
-        <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_12%_10%,rgba(200,161,90,0.12),transparent_27%),radial-gradient(circle_at_92%_90%,rgba(13,27,42,0.06),transparent_30%)]" />
+        <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_12%_10%,rgba(200,161,90,0.08),transparent_27%),radial-gradient(circle_at_92%_90%,rgba(13,27,42,0.05),transparent_30%)]" />
 
-        <div className="pointer-events-none fixed left-0 top-0 h-px w-full bg-gradient-to-r from-transparent via-[#C8A15A]/45 to-transparent" />
-
-        <div className="relative">
-          <AppHeader />
-
-          <section className="mx-auto w-full max-w-[1600px] px-4 pb-32 pt-4 sm:px-6 sm:pb-36 lg:px-8">
-            <div
-              key={pathname}
-              className="page-route-enter min-w-0"
-            >
-              {children}
-            </div>
-          </section>
-        </div>
+        <section className="relative mx-auto w-full max-w-[1600px] px-4 pb-28 pt-5 sm:px-6 sm:pb-32 sm:pt-7 lg:px-8">
+          <div
+            key={pathname}
+            className="page-route-enter min-w-0"
+          >
+            {children}
+          </div>
+        </section>
 
         <AppDock />
       </main>

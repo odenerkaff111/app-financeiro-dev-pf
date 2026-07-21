@@ -92,7 +92,7 @@ export function AppDock() {
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-4 z-[100] flex justify-center px-3 sm:bottom-6">
       <nav
-        className="pointer-events-auto flex items-end gap-1.5 rounded-[28px] border border-[#C8A15A]/35 bg-[#0D1B2A]/95 p-2 shadow-[0_24px_70px_rgba(13,27,42,0.35)] backdrop-blur-2xl sm:gap-2 sm:p-2.5"
+        className="pointer-events-auto flex items-center gap-1.5 rounded-[24px] border border-[#C8A15A]/30 bg-[#0D1B2A]/95 p-2 shadow-[0_20px_60px_rgba(13,27,42,0.32)] backdrop-blur-2xl"
         aria-label="Navegação principal"
       >
         {navigationItems.map((item) => {
@@ -104,56 +104,50 @@ export function AppDock() {
               key={item.href}
               href={item.href}
               scroll={false}
-              aria-current={active ? "page" : undefined}
               aria-label={item.label}
+              title={item.label}
+              aria-current={active ? "page" : undefined}
               className={[
-                "group relative flex h-14 min-w-14 flex-col items-center justify-center rounded-[20px] px-3 transition-all duration-200 ease-out",
-                "hover:-translate-y-2 hover:scale-105",
+                "group relative flex h-12 w-12 items-center justify-center rounded-[16px] transition-all duration-200",
+                "hover:-translate-y-1.5 hover:scale-105",
                 active
-                  ? "bg-[#F7F5EF] text-[#0D1B2A] shadow-[0_10px_30px_rgba(0,0,0,0.24)]"
-                  : "text-[#F7F5EF]/75 hover:bg-white/10 hover:text-[#F7F5EF]",
+                  ? "bg-[#F7F5EF] text-[#0D1B2A] shadow-[0_8px_22px_rgba(0,0,0,0.22)]"
+                  : "text-[#F7F5EF]/75 hover:bg-white/10 hover:text-white",
               ].join(" ")}
             >
               <Icon
                 size={21}
-                strokeWidth={active ? 2.25 : 1.8}
+                strokeWidth={active ? 2.3 : 1.9}
               />
 
-              <span className="mt-1 hidden text-[9px] font-semibold uppercase tracking-[0.08em] sm:block">
-                {item.label}
-              </span>
-
               {active && (
-                <span className="absolute -bottom-1 h-1 w-1 rounded-full bg-[#C8A15A]" />
+                <span className="absolute -bottom-1.5 h-1 w-1 rounded-full bg-[#C8A15A]" />
               )}
 
-              <span className="pointer-events-none absolute -top-11 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-[#0D1B2A] px-2.5 py-1.5 text-[11px] font-medium text-[#F7F5EF] opacity-0 shadow-lg transition group-hover:opacity-100 sm:hidden">
+              <span className="pointer-events-none absolute -top-10 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-[#0D1B2A] px-2.5 py-1.5 text-[11px] font-medium text-[#F7F5EF] opacity-0 shadow-lg transition group-hover:opacity-100">
                 {item.label}
               </span>
             </Link>
           );
         })}
 
-        <div className="mx-0.5 h-10 w-px self-center bg-[#C8A15A]/30 sm:mx-1" />
+        <div className="mx-1 h-7 w-px bg-[#C8A15A]/30" />
 
         <button
           type="button"
           onClick={() => void handleLogout()}
           disabled={loggingOut}
           aria-label="Sair da conta"
-          className="group relative flex h-14 min-w-14 flex-col items-center justify-center rounded-[20px] px-3 text-[#F7F5EF]/75 transition-all duration-200 ease-out hover:-translate-y-2 hover:scale-105 hover:bg-red-500/15 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-50"
+          title="Sair"
+          className="group relative flex h-12 w-12 items-center justify-center rounded-[16px] text-[#F7F5EF]/75 transition-all duration-200 hover:-translate-y-1.5 hover:scale-105 hover:bg-red-500/15 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {loggingOut ? (
             <Loader2 className="h-[21px] w-[21px] animate-spin" />
           ) : (
-            <LogOut size={21} strokeWidth={1.8} />
+            <LogOut size={21} strokeWidth={1.9} />
           )}
 
-          <span className="mt-1 hidden text-[9px] font-semibold uppercase tracking-[0.08em] sm:block">
-            Sair
-          </span>
-
-          <span className="pointer-events-none absolute -top-11 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-[#0D1B2A] px-2.5 py-1.5 text-[11px] font-medium text-[#F7F5EF] opacity-0 shadow-lg transition group-hover:opacity-100 sm:hidden">
+          <span className="pointer-events-none absolute -top-10 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-[#0D1B2A] px-2.5 py-1.5 text-[11px] font-medium text-[#F7F5EF] opacity-0 shadow-lg transition group-hover:opacity-100">
             Sair
           </span>
         </button>
