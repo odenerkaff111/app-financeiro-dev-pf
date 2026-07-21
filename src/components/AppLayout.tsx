@@ -39,8 +39,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#090814] text-white">
-        <Loader2 className="h-8 w-8 animate-spin text-cyan-300" />
+      <div className="flex min-h-screen items-center justify-center bg-white text-gray-900">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
       </div>
     );
   }
@@ -50,17 +50,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[#090814] text-slate-100">
-      <div className="pointer-events-none fixed -left-32 top-[-120px] h-96 w-96 rounded-full bg-fuchsia-600/20 blur-[120px]" />
-      <div className="pointer-events-none fixed bottom-[-160px] right-[-120px] h-[460px] w-[460px] rounded-full bg-cyan-400/20 blur-[130px]" />
-      <div className="pointer-events-none fixed left-1/2 top-1/2 h-[620px] w-[620px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-500/10 blur-[170px]" />
-
+    <main className="relative min-h-screen overflow-hidden bg-white text-gray-900">
       <div className="relative flex min-h-screen">
         <Sidebar />
-        <section className="flex-1 p-4 md:p-6 lg:p-8">
-          <div className="min-h-[calc(100vh-4rem)] rounded-[34px] border border-white/10 bg-white/[0.055]/[0.045] p-4 shadow-[0_28px_90px_rgba(0,0,0,0.35)] backdrop-blur-2xl md:p-6 lg:p-8">
-            {children}
-          </div>
+        <section className="flex-1 bg-white p-4 md:p-6 lg:p-8">
+          {children}
         </section>
       </div>
     </main>

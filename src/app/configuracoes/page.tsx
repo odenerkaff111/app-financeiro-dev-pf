@@ -73,7 +73,7 @@ export default function ConfiguracoesPage() {
   }
 
   async function apagarUsuario(id: string) {
-    if (window.confirm("Remover este usuÃ¡rio da equipe?")) {
+    if (window.confirm("Remover este usuário da equipe?")) {
       await supabase.from('usuarios').delete().eq('id', id);
       carregarUsuariosSistema();
     }
@@ -86,7 +86,7 @@ export default function ConfiguracoesPage() {
 
   async function salvarConfiguracoesFiscais() {
     await supabase.from('configuracoes_sistema').upsert({ id: 1, imposto_simples_nacional_percentual: configFiscais.sn_percentual, imposto_renda_percentual: configFiscais.ir_percentual });
-    alert("ConfiguraÃ§Ãµes fiscais salvas!");
+    alert("Configurações fiscais salvas!");
   }
 
   function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
@@ -133,7 +133,7 @@ export default function ConfiguracoesPage() {
     <div className="font-sans flex h-[85vh] bg-white/[0.055] backdrop-blur-2xl rounded-xl shadow-[0_4px_12px_rgba(0,0,0,0.04)] border border-white/10 overflow-hidden">
       
       <div className="w-64 border-r border-white/10 bg-[#f9fafb] p-6 flex flex-col">
-        <h2 className="text-sm font-semibold text-white/55 uppercase tracking-wider mb-6">ConfiguraÃ§Ãµes</h2>
+        <h2 className="text-sm font-semibold text-white/55 uppercase tracking-wider mb-6">Configurações</h2>
         <nav className="space-y-1 flex-1">
           <button onClick={() => setAbaAtiva('perfil')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${abaAtiva === 'perfil' ? 'bg-white/[0.055] text-[#0a003d] shadow-[0_18px_55px_rgba(0,0,0,0.22)] border border-white/10' : 'text-white/65 hover:bg-white/[0.055]'}`}>
             <User size={16} /> Meu Perfil
@@ -154,11 +154,11 @@ export default function ConfiguracoesPage() {
         
         {abaAtiva === 'perfil' && (
           <div className="max-w-2xl">
-            <h1 className="text-2xl font-bold text-white tracking-tight mb-8">Minhas configuraÃ§Ãµes</h1>
+            <h1 className="text-2xl font-bold text-white tracking-tight mb-8">Minhas configurações</h1>
             <div className="flex flex-col md:flex-row items-start gap-12">
               <div className="w-full md:w-1/3">
                 <h3 className="text-sm font-semibold text-white">Perfil</h3>
-                <p className="text-xs text-white/55 mt-1 leading-relaxed">Suas informaÃ§Ãµes pessoais e configuraÃ§Ãµes de seguranÃ§a.</p>
+                <p className="text-xs text-white/55 mt-1 leading-relaxed">Suas informações pessoais e configurações de segurança.</p>
               </div>
               <div className="w-full md:w-2/3 space-y-6">
                 <div>
@@ -183,7 +183,7 @@ export default function ConfiguracoesPage() {
                 <div><label className="block text-[13px] font-medium text-white/80 mb-1">E-mail</label><input type="email" disabled className="w-full p-2.5 text-sm border border-white/10 bg-white/[0.045] text-white/40 rounded-lg" value={sessaoUsuario?.email || ''} /></div>
                 <div className="pt-4 mt-8 border-t border-gray-50">
                   <button onClick={salvarPerfil} disabled={salvandoPerfil} className="px-5 py-2.5 bg-[#0a003d] text-white text-sm font-medium rounded-lg hover:bg-gray-900 transition-colors disabled:opacity-50">
-                    {salvandoPerfil ? "Salvando..." : "Salvar alteraÃ§Ãµes"}
+                    {salvandoPerfil ? "Salvando..." : "Salvar alterações"}
                   </button>
                 </div>
               </div>
@@ -202,7 +202,7 @@ export default function ConfiguracoesPage() {
             <div className="border border-white/10 rounded-xl overflow-hidden shadow-[0_2px_8px_rgba(0,0,0,0.02)] bg-white/[0.055]">
               <table className="w-full text-sm text-left">
                 <thead className="bg-white/[0.045]/80 border-b border-white/10">
-                  <tr><th className="px-6 py-4 text-xs font-semibold text-white/55 uppercase tracking-wider">Nome</th><th className="px-6 py-4 text-xs font-semibold text-white/55 uppercase tracking-wider">E-mail</th><th className="px-6 py-4 text-xs font-semibold text-white/55 uppercase tracking-wider">FunÃ§Ã£o</th><th className="px-6 py-4 text-xs font-semibold text-white/55 uppercase tracking-wider text-right">AÃ§Ã£o</th></tr>
+                  <tr><th className="px-6 py-4 text-xs font-semibold text-white/55 uppercase tracking-wider">Nome</th><th className="px-6 py-4 text-xs font-semibold text-white/55 uppercase tracking-wider">E-mail</th><th className="px-6 py-4 text-xs font-semibold text-white/55 uppercase tracking-wider">Função</th><th className="px-6 py-4 text-xs font-semibold text-white/55 uppercase tracking-wider text-right">Ação</th></tr>
                 </thead>
                 <tbody>
                   {usuariosSistema.map(p => (
@@ -234,18 +234,18 @@ export default function ConfiguracoesPage() {
 
         {abaAtiva === 'imposto' && (
           <div className="max-w-2xl">
-            <h1 className="text-2xl font-bold text-white tracking-tight mb-8">TributaÃ§Ã£o</h1>
+            <h1 className="text-2xl font-bold text-white tracking-tight mb-8">Tributação</h1>
             <div className="space-y-6">
                 <div className="border border-white/10 bg-white/[0.055] backdrop-blur-2xl p-6 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
                     <div className="flex items-center gap-2 mb-2"><Percent className="text-white/40" size={18}/><h3 className="text-sm font-semibold text-white">Simples Nacional (Anexo V)</h3></div>
-                    <p className="text-xs text-white/55 mb-5">Usado para cÃ¡lculo da reserva tributÃ¡ria no Dashboard.</p>
+                    <p className="text-xs text-white/55 mb-5">Usado para cálculo da reserva tributária no Dashboard.</p>
                     <div className="relative max-w-[140px]">
                       <input type="number" step="0.01" className="w-full pl-4 pr-10 py-2.5 text-sm border border-white/10 rounded-lg outline-none focus:ring-2 focus:ring-[#0097a7] font-medium" value={configFiscais.sn_percentual} onChange={e => setConfigFiscais({...configFiscais, sn_percentual: parseFloat(e.target.value)})} />
                       <span className="absolute right-4 top-1/2 -translate-y-1/2 text-white/40 font-medium">%</span>
                     </div>
                 </div>
                 <div className="pt-4">
-                  <button onClick={salvarConfiguracoesFiscais} className="flex items-center gap-2 px-5 py-2.5 bg-[#0a003d] text-white text-sm font-medium rounded-lg hover:bg-gray-900 transition-colors shadow-[0_18px_55px_rgba(0,0,0,0.22)]"><Save size={16} /> Salvar AlteraÃ§Ãµes</button>
+                  <button onClick={salvarConfiguracoesFiscais} className="flex items-center gap-2 px-5 py-2.5 bg-[#0a003d] text-white text-sm font-medium rounded-lg hover:bg-gray-900 transition-colors shadow-[0_18px_55px_rgba(0,0,0,0.22)]"><Save size={16} /> Salvar Alterações</button>
                 </div>
             </div>
           </div>
