@@ -1,738 +1,855 @@
 ﻿"use client";
 
-import { useEffect, useState } from "react";
 import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import {
+  AlertCircle,
   ArrowDownCircle,
   ArrowUpCircle,
-  Wallet,
-  AlertCircle,
+  CheckCircle2,
   Clock,
+  Loader2,
+  PiggyBank,
   Receipt,
-  X,
+  Wallet,
 } from "lucide-react";
 import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
   ResponsiveContainer,
   Tooltip as RechartsTooltip,
   XAxis,
   YAxis,
-  PieChart,
-  Pie,
-  Cell,
 } from "recharts";
-import { supabase } from "@/lib/supabase";
 import {
   format,
-  isAfter,
   isSameMonth,
   isSameWeek,
   isToday,
   parseISO,
-  addMonths,
 } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { supabase } from "@/lib/supabase";
+import { useHousehold } from "@/contexts/HouseholdContext";
 
-export default function DashboardPage() {
-  const [montado, setMontado] = useState(false);
-  const [transacoes, setTransacoes] = useState<any[]>([]);
-  const [clientesBase, setClientesBase] = useState<any[]>([]);
-  const [filtroPeriodo, setFiltroPeriodo] = useState("mes");
-  const [userName, setUserName] = useState("Sócio");
-  const [taxaImposto, setTaxaImposto] = useState(0.155);
-  const [contaSelecionada, setContaSelecionada] = useState<any>(null);
+type PeriodFilter =
+  | "today"
+  | "week"
+  | "month"
+  | "all";
 
-  const mockTransacoes = [
-    {
-      id: "m1",
-      tipo: "receita",
-      valor: 5800,
-      status: "Pago",
-      categoria: "Serviços",
-      nome: "Cliente A",
-      descricao: "Projeto mensal",
-      data_competencia: "2026-07-01",
-      data_pagamento: "2026-07-01",
-      data_vencimento: "2026-07-05",
-    },
-    {
-      id: "m2",
-      tipo: "despesa",
-      valor: 1420,
-      status: "Pago",
-      categoria: "Despesas",
-      nome: "Fornecedor",
-      descricao: "Conta de internet",
-      data_competencia: "2026-07-03",
-      data_pagamento: "2026-07-03",
-      data_vencimento: "2026-07-03",
-    },
-    {
-      id: "m3",
-      tipo: "receita",
-      valor: 3200,
-      status: "Pendente",
-      categoria: "Serviços",
-      nome: "Cliente B",
-      descricao: "Prestação de serviço",
-      data_competencia: "2026-07-09",
-      data_pagamento: null,
-      data_vencimento: "2026-07-15",
-    },
-    {
-      id: "m4",
-      tipo: "despesa",
-      valor: 890,
-      status: "Pendente",
-      categoria: "Diversão",
-      nome: "Ads",
-      descricao: "Campanha",
-      data_competencia: "2026-07-10",
-      data_pagamento: null,
-      data_vencimento: "2026-07-20",
-    },
-    {
-      id: "m5",
-      tipo: "receita",
-      valor: 1800,
-      status: "Recebido",
-      categoria: "Serviços",
-      nome: "Cliente C",
-      descricao: "Reembolso",
-      data_competencia: "2026-06-22",
-      data_pagamento: "2026-06-22",
-      data_vencimento: "2026-06-22",
-    },
-    {
-      id: "m6",
-      tipo: "despesa",
-      valor: 560,
-      status: "Pago",
-      categoria: "Educação",
-      nome: "Estado",
-      descricao: "ISS",
-      data_competencia: "2026-06-18",
-      data_pagamento: "2026-06-18",
-      data_vencimento: "2026-06-18",
-    },
-    {
-      id: "m7",
-      tipo: "despesa",
-      valor: 780,
-      status: "Pendente",
-      categoria: "Empréstimo",
-      nome: "Banco",
-      descricao: "Parcela",
-      data_competencia: "2026-07-12",
-      data_pagamento: null,
-      data_vencimento: "2026-07-25",
-    },
-    {
-      id: "m8",
-      tipo: "despesa",
-      valor: 320,
-      status: "Pago",
-      categoria: "Alimentação",
-      nome: "Super",
-      descricao: "Compras do mês",
-      data_competencia: "2026-07-04",
-      data_pagamento: "2026-07-04",
-      data_vencimento: "2026-07-04",
-    },
-    {
-      id: "m9",
-      tipo: "despesa",
-      valor: 950,
-      status: "Pago",
-      categoria: "Investimento",
-      nome: "Renda fixa",
-      descricao: "Aplicação",
-      data_competencia: "2026-07-06",
-      data_pagamento: "2026-07-06",
-      data_vencimento: "2026-07-06",
-    },
-    {
-      id: "m10",
-      tipo: "despesa",
-      valor: 410,
-      status: "Pendente",
-      categoria: "Dívidas",
-      nome: "Cartão",
-      descricao: "Fatura",
-      data_competencia: "2026-07-14",
-      data_pagamento: null,
-      data_vencimento: "2026-07-28",
-    },
-  ];
+type AccountType =
+  | "checking"
+  | "savings"
+  | "cash"
+  | "wallet"
+  | "credit_card"
+  | "investment";
 
-  const mockClientes = [
-    {
-      id: "c1",
-      status: "Ativo",
-    },
-    {
-      id: "c2",
-      status: "Ativo",
-    },
-    {
-      id: "c3",
-      status: "Inativo",
-    },
-  ];
+type TransactionType =
+  | "income"
+  | "expense"
+  | "transfer"
+  | "debt_received"
+  | "debt_payment"
+  | "investment_contribution"
+  | "investment_withdrawal"
+  | "adjustment";
 
-  useEffect(() => {
-    setMontado(true);
-    carregarDados();
-  }, []);
+type TransactionStatus =
+  | "planned"
+  | "paid"
+  | "overdue"
+  | "cancelled";
 
-  async function carregarDados() {
-    const [
-      resTransacoes,
-      resClientes,
-      resSession,
-      resConfig,
-    ] = await Promise.all([
-      supabase.from("transacoes").select("*"),
-      supabase.from("clientes").select("id, status"),
-      supabase.auth.getSession(),
-      supabase
-        .from("configuracoes_sistema")
-        .select("imposto_simples_nacional_percentual")
-        .eq("id", 1)
-        .single(),
-    ]);
+type Account = {
+  id: string;
+  household_id: string;
+  name: string;
+  institution_name: string | null;
+  type: AccountType;
+  balance: number | string;
+  is_active: boolean;
+};
 
-    const transacoesCarregadas =
-      resTransacoes.data && resTransacoes.data.length > 0
-        ? resTransacoes.data
-        : mockTransacoes;
+type Category = {
+  id: string;
+  name: string;
+  kind: string;
+  group_type: string;
+};
 
-    const clientesCarregados =
-      resClientes.data && resClientes.data.length > 0
-        ? resClientes.data
-        : mockClientes;
+type Transaction = {
+  id: string;
+  household_id: string;
+  account_id: string;
+  destination_account_id: string | null;
+  category_id: string | null;
+  type: TransactionType;
+  status: TransactionStatus;
+  description: string;
+  merchant: string | null;
+  amount: number | string;
+  occurred_on: string;
+  due_date: string | null;
+  paid_at: string | null;
+};
 
-    setTransacoes(transacoesCarregadas as any[]);
-    setClientesBase(clientesCarregados as any[]);
+const MONTH_NAMES = [
+  "Jan",
+  "Fev",
+  "Mar",
+  "Abr",
+  "Mai",
+  "Jun",
+  "Jul",
+  "Ago",
+  "Set",
+  "Out",
+  "Nov",
+  "Dez",
+];
 
-    if (resConfig.data) {
-      setTaxaImposto(
-        Number(
-          resConfig.data.imposto_simples_nacional_percentual,
-        ) / 100,
-      );
-    }
+const PIE_COLORS = [
+  "#0D1B2A",
+  "#C8A15A",
+  "#64748B",
+  "#B45309",
+  "#047857",
+  "#7C3AED",
+  "#BE123C",
+  "#0369A1",
+];
 
-    let nomeReal = "Sócio";
+function formatCurrency(
+  value: number | string | null,
+) {
+  const parsedValue = Number(value ?? 0);
 
-    if (resSession.data.session) {
-      const { data: perfil } = await supabase
-        .from("perfis")
-        .select("nome")
-        .eq("id", resSession.data.session.user.id)
-        .single();
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  }).format(
+    Number.isFinite(parsedValue)
+      ? parsedValue
+      : 0,
+  );
+}
 
-      if (perfil?.nome) {
-        nomeReal = perfil.nome.split(" ")[0];
-        setUserName(nomeReal);
-      }
-    }
+function formatCompactCurrency(value: number) {
+  return new Intl.NumberFormat("pt-BR", {
+    notation: "compact",
+    compactDisplay: "short",
+  }).format(value);
+}
 
-    if ("speechSynthesis" in window) {
-      const agora = Date.now();
-      const ultimo = localStorage.getItem("jarvis_last_speak");
-      const quatroHoras = 1000 * 60 * 60 * 4;
-
-      if (
-        !ultimo ||
-        agora - parseInt(ultimo, 10) > quatroHoras
-      ) {
-        const msg = new SpeechSynthesisUtterance(
-          `Bem-vindo de volta, ${nomeReal}. Este é seu resumo financeiro!`,
-        );
-
-        msg.lang = "pt-BR";
-        msg.rate = 1.0;
-
-        window.speechSynthesis.speak(msg);
-
-        localStorage.setItem(
-          "jarvis_last_speak",
-          agora.toString(),
-        );
-      }
-    }
+function formatDate(value: string | null) {
+  if (!value) {
+    return "Sem vencimento";
   }
 
-  const getSafeDate = (dateStr: any) => {
-    try {
-      return dateStr ? parseISO(dateStr) : new Date();
-    } catch {
-      return new Date();
-    }
-  };
+  try {
+    return format(
+      parseISO(value),
+      "dd/MM/yyyy",
+      {
+        locale: ptBR,
+      },
+    );
+  } catch {
+    return value;
+  }
+}
 
-  const hoje = new Date();
-  const proximoMes = addMonths(hoje, 1);
+function getToday() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(
+    now.getMonth() + 1,
+  ).padStart(2, "0");
+  const day = String(
+    now.getDate(),
+  ).padStart(2, "0");
 
-  const dadosFiltrados = transacoes.filter((transacao) => {
-    if (filtroPeriodo === "tudo") {
-      return true;
-    }
+  return `${year}-${month}-${day}`;
+}
 
-    const dataRef = getSafeDate(
-      transacao.data_competencia,
+function getEffectiveStatus(
+  transaction: Transaction,
+): TransactionStatus {
+  if (
+    transaction.status === "planned" &&
+    transaction.due_date &&
+    transaction.due_date < getToday()
+  ) {
+    return "overdue";
+  }
+
+  return transaction.status;
+}
+
+export default function DashboardPage() {
+  const { household } = useHousehold();
+
+  const [accounts, setAccounts] = useState<
+    Account[]
+  >([]);
+
+  const [categories, setCategories] =
+    useState<Category[]>([]);
+
+  const [transactions, setTransactions] =
+    useState<Transaction[]>([]);
+
+  const [periodFilter, setPeriodFilter] =
+    useState<PeriodFilter>("month");
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [updatingId, setUpdatingId] =
+    useState<string | null>(null);
+
+  const [error, setError] = useState<
+    string | null
+  >(null);
+
+  const loadDashboard = useCallback(
+    async () => {
+      setLoading(true);
+      setError(null);
+
+      const [
+        accountsResult,
+        categoriesResult,
+        transactionsResult,
+      ] = await Promise.all([
+        supabase
+          .from("pf_accounts")
+          .select(
+            "id, household_id, name, institution_name, type, balance, is_active",
+          )
+          .eq(
+            "household_id",
+            household.id,
+          )
+          .order("name"),
+
+        supabase
+          .from("pf_categories")
+          .select(
+            "id, name, kind, group_type",
+          )
+          .eq(
+            "household_id",
+            household.id,
+          ),
+
+        supabase
+          .from("pf_transactions")
+          .select(
+            "id, household_id, account_id, destination_account_id, category_id, type, status, description, merchant, amount, occurred_on, due_date, paid_at",
+          )
+          .eq(
+            "household_id",
+            household.id,
+          )
+          .order("occurred_on", {
+            ascending: false,
+          })
+          .order("created_at", {
+            ascending: false,
+          }),
+      ]);
+
+      if (accountsResult.error) {
+        console.error(
+          "Erro ao carregar contas:",
+          accountsResult.error,
+        );
+
+        setError(
+          "Não foi possível carregar suas contas.",
+        );
+
+        setLoading(false);
+        return;
+      }
+
+      if (categoriesResult.error) {
+        console.error(
+          "Erro ao carregar categorias:",
+          categoriesResult.error,
+        );
+
+        setError(
+          "Não foi possível carregar as categorias.",
+        );
+
+        setLoading(false);
+        return;
+      }
+
+      if (transactionsResult.error) {
+        console.error(
+          "Erro ao carregar movimentações:",
+          transactionsResult.error,
+        );
+
+        setError(
+          "Não foi possível carregar as movimentações.",
+        );
+
+        setLoading(false);
+        return;
+      }
+
+      setAccounts(
+        (accountsResult.data ??
+          []) as Account[],
+      );
+
+      setCategories(
+        (categoriesResult.data ??
+          []) as Category[],
+      );
+
+      setTransactions(
+        (transactionsResult.data ??
+          []) as Transaction[],
+      );
+
+      setLoading(false);
+    },
+    [household.id],
+  );
+
+  useEffect(() => {
+    void loadDashboard();
+  }, [loadDashboard]);
+
+  const categoryMap = useMemo(() => {
+    return new Map(
+      categories.map((category) => [
+        category.id,
+        category,
+      ]),
+    );
+  }, [categories]);
+
+  const periodTransactions = useMemo(() => {
+    const now = new Date();
+
+    return transactions.filter(
+      (transaction) => {
+        if (periodFilter === "all") {
+          return true;
+        }
+
+        try {
+          const date = parseISO(
+            transaction.occurred_on,
+          );
+
+          if (periodFilter === "today") {
+            return isToday(date);
+          }
+
+          if (periodFilter === "week") {
+            return isSameWeek(
+              date,
+              now,
+              {
+                weekStartsOn: 1,
+              },
+            );
+          }
+
+          return isSameMonth(
+            date,
+            now,
+          );
+        } catch {
+          return true;
+        }
+      },
+    );
+  }, [
+    transactions,
+    periodFilter,
+  ]);
+
+  const metrics = useMemo(() => {
+    const activeAccounts =
+      accounts.filter(
+        (account) => account.is_active,
+      );
+
+    const available =
+      activeAccounts
+        .filter((account) =>
+          [
+            "checking",
+            "savings",
+            "cash",
+            "wallet",
+          ].includes(account.type),
+        )
+        .reduce(
+          (total, account) =>
+            total +
+            Number(account.balance || 0),
+          0,
+        );
+
+    const invested =
+      activeAccounts
+        .filter(
+          (account) =>
+            account.type ===
+            "investment",
+        )
+        .reduce(
+          (total, account) =>
+            total +
+            Number(account.balance || 0),
+          0,
+        );
+
+    let income = 0;
+    let expense = 0;
+    let receivable = 0;
+    let payable = 0;
+    let overdue = 0;
+
+    periodTransactions.forEach(
+      (transaction) => {
+        const amount =
+          Number(transaction.amount) || 0;
+
+        const effectiveStatus =
+          getEffectiveStatus(
+            transaction,
+          );
+
+        if (
+          transaction.status === "paid"
+        ) {
+          if (
+            transaction.type ===
+              "income" ||
+            transaction.type ===
+              "debt_received"
+          ) {
+            income += amount;
+          }
+
+          if (
+            transaction.type ===
+              "expense" ||
+            transaction.type ===
+              "debt_payment"
+          ) {
+            expense += amount;
+          }
+        }
+
+        if (
+          effectiveStatus ===
+            "planned" ||
+          effectiveStatus ===
+            "overdue"
+        ) {
+          if (
+            transaction.type === "income"
+          ) {
+            receivable += amount;
+          }
+
+          if (
+            transaction.type ===
+              "expense" ||
+            transaction.type ===
+              "debt_payment"
+          ) {
+            payable += amount;
+          }
+        }
+
+        if (
+          effectiveStatus ===
+          "overdue"
+        ) {
+          overdue += amount;
+        }
+      },
     );
 
-    if (filtroPeriodo === "hoje") {
-      return isToday(dataRef);
-    }
+    return {
+      available,
+      invested,
+      income,
+      expense,
+      receivable,
+      payable,
+      overdue,
+    };
+  }, [
+    accounts,
+    periodTransactions,
+  ]);
 
-    if (filtroPeriodo === "semana") {
-      return isSameWeek(dataRef, hoje);
-    }
+  const monthlyChartData =
+    useMemo(() => {
+      const currentYear =
+        new Date().getFullYear();
 
-    if (filtroPeriodo === "mes") {
-      return isSameMonth(dataRef, hoje);
-    }
+      const data = MONTH_NAMES.map(
+        (name) => ({
+          name,
+          Entradas: 0,
+          Saídas: 0,
+        }),
+      );
 
-    return true;
-  });
+      transactions.forEach(
+        (transaction) => {
+          if (
+            transaction.status !== "paid"
+          ) {
+            return;
+          }
 
-  let entrada = 0;
-  let saida = 0;
-  let pagamentosEmDia = 0;
-  let pagamentosAtrasados = 0;
-  let aReceberProximoMes = 0;
+          try {
+            const date = parseISO(
+              transaction.occurred_on,
+            );
 
-  const despesasPorCategoria: Record<string, number> = {};
-  const graficoMap: Record<string, any> = {};
+            if (
+              date.getFullYear() !==
+              currentYear
+            ) {
+              return;
+            }
 
-  const meses = [
-    "Jan",
-    "Fev",
-    "Mar",
-    "Abr",
-    "Mai",
-    "Jun",
-    "Jul",
-    "Ago",
-    "Set",
-    "Out",
-    "Nov",
-    "Dez",
-  ];
+            const amount =
+              Number(transaction.amount) ||
+              0;
 
-  const lembretes = transacoes
-    .filter(
-      (transacao) =>
-        transacao.status?.toLowerCase() === "pendente",
-    )
-    .sort(
-      (a, b) =>
-        getSafeDate(a.data_vencimento).getTime() -
-        getSafeDate(b.data_vencimento).getTime(),
-    )
-    .slice(0, 5);
+            const item =
+              data[date.getMonth()];
 
-  dadosFiltrados.forEach((transacao) => {
-    const valor = Number(transacao.valor) || 0;
+            if (
+              transaction.type ===
+                "income" ||
+              transaction.type ===
+                "debt_received"
+            ) {
+              item.Entradas += amount;
+            }
 
-    const statusPago =
-      transacao.status?.toLowerCase() === "pago" ||
-      transacao.status?.toLowerCase() === "recebido";
+            if (
+              transaction.type ===
+                "expense" ||
+              transaction.type ===
+                "debt_payment"
+            ) {
+              item.Saídas += amount;
+            }
+          } catch {
+            return;
+          }
+        },
+      );
 
-    if (statusPago) {
-      if (transacao.tipo === "receita") {
-        entrada += valor;
-      }
+      return data;
+    }, [transactions]);
 
-      if (transacao.tipo === "despesa") {
-        saida += valor;
+  const categoryChartData =
+    useMemo(() => {
+      const categoryTotals =
+        new Map<string, number>();
 
-        const categoria =
-          transacao.categoria || "Despesas";
+      periodTransactions.forEach(
+        (transaction) => {
+          if (
+            transaction.status !==
+              "paid" ||
+            transaction.type !== "expense"
+          ) {
+            return;
+          }
 
-        despesasPorCategoria[categoria] =
-          (despesasPorCategoria[categoria] || 0) +
-          valor;
-      }
+          const category =
+            transaction.category_id
+              ? categoryMap.get(
+                  transaction.category_id,
+                )
+              : null;
 
-      const dataPagamentoReal =
-        transacao.data_pagamento ||
-        transacao.data_competencia;
+          const categoryName =
+            category?.name ??
+            "Sem categoria";
 
-      const mesIdx =
-        getSafeDate(dataPagamentoReal).getMonth();
+          categoryTotals.set(
+            categoryName,
+            (categoryTotals.get(
+              categoryName,
+            ) ?? 0) +
+              Number(
+                transaction.amount || 0,
+              ),
+          );
+        },
+      );
 
-      const nomeMes = meses[mesIdx];
+      return Array.from(
+        categoryTotals.entries(),
+      )
+        .map(([name, value]) => ({
+          name,
+          value,
+        }))
+        .sort(
+          (a, b) =>
+            b.value - a.value,
+        );
+    }, [
+      periodTransactions,
+      categoryMap,
+    ]);
 
-      if (!graficoMap[nomeMes]) {
-        graficoMap[nomeMes] = {
-          name: nomeMes,
-          Entrada: 0,
-          Saida: 0,
-        };
-      }
+  const pendingTransactions =
+    useMemo(() => {
+      return transactions
+        .filter((transaction) => {
+          const status =
+            getEffectiveStatus(
+              transaction,
+            );
 
-      if (transacao.tipo === "receita") {
-        graficoMap[nomeMes].Entrada += valor;
-      }
+          return (
+            status === "planned" ||
+            status === "overdue"
+          );
+        })
+        .sort((a, b) => {
+          const first =
+            a.due_date ??
+            a.occurred_on;
 
-      if (transacao.tipo === "despesa") {
-        graficoMap[nomeMes].Saida += valor;
-      }
-    }
+          const second =
+            b.due_date ??
+            b.occurred_on;
 
-    if (transacao.tipo === "receita") {
-      if (statusPago) {
-        pagamentosEmDia++;
-      }
+          return first.localeCompare(
+            second,
+          );
+        })
+        .slice(0, 8);
+    }, [transactions]);
 
-      const statusPendenteOuAtrasado =
-        transacao.status?.toLowerCase() ===
-          "pendente" ||
-        transacao.status?.toLowerCase() ===
-          "atrasado";
+  async function markAsPaid(
+    transaction: Transaction,
+  ) {
+    setUpdatingId(transaction.id);
+    setError(null);
 
-      if (
-        statusPendenteOuAtrasado &&
-        isAfter(
-          hoje,
-          getSafeDate(transacao.data_vencimento),
-        )
-      ) {
-        pagamentosAtrasados++;
-      }
-    }
-  });
+    const { error: updateError } =
+      await supabase
+        .from("pf_transactions")
+        .update({
+          status: "paid",
+          paid_at:
+            new Date().toISOString(),
+          updated_at:
+            new Date().toISOString(),
+        })
+        .eq("id", transaction.id)
+        .eq(
+          "household_id",
+          household.id,
+        );
 
-  transacoes.forEach((transacao) => {
-    if (
-      transacao.tipo === "receita" &&
-      transacao.status?.toLowerCase() === "pendente"
-    ) {
-      if (
-        isSameMonth(
-          getSafeDate(transacao.data_vencimento),
-          proximoMes,
-        )
-      ) {
-        aReceberProximoMes +=
-          Number(transacao.valor) || 0;
-      }
-    }
-  });
+    if (updateError) {
+      console.error(
+        "Erro ao marcar como realizado:",
+        updateError,
+      );
 
-  const saldo = entrada - saida;
+      setError(
+        updateError.message ||
+          "Não foi possível atualizar a movimentação.",
+      );
 
-  const margemLucro =
-    entrada > 0
-      ? ((entrada - saida) / entrada) * 100
-      : 0;
-
-  const categoriasObjetivo = [
-    "alimentação",
-    "empréstimo",
-    "dívidas",
-    "despesas",
-    "investimento",
-    "educação",
-    "diversão",
-  ];
-
-  const gastosPorCategoria =
-    categoriasObjetivo.reduce(
-      (acc, categoria) => ({
-        ...acc,
-        [categoria]: 0,
-      }),
-      {} as Record<string, number>,
-    );
-
-  transacoes.forEach((transacao) => {
-    if (transacao.tipo !== "despesa") {
+      setUpdatingId(null);
       return;
     }
 
-    const categoriaNormalizada = String(
-      transacao.categoria || "",
-    )
-      .trim()
-      .toLowerCase();
+    setUpdatingId(null);
 
-    const mapaCategoria = {
-      alimentação: "alimentação",
-      alimento: "alimentação",
-      comida: "alimentação",
-      emprestimo: "empréstimo",
-      empréstimo: "empréstimo",
-      divida: "dívidas",
-      dívida: "dívidas",
-      dividas: "dívidas",
-      despesa: "despesas",
-      despesas: "despesas",
-      investimento: "investimento",
-      investir: "investimento",
-      educação: "educação",
-      educacao: "educação",
-      curso: "educação",
-      diversao: "diversão",
-      lazer: "diversão",
-      entretenimento: "diversão",
-    } as Record<string, string>;
-
-    const categoriaFinal =
-      mapaCategoria[categoriaNormalizada] ||
-      "despesas";
-
-    gastosPorCategoria[categoriaFinal] =
-      (gastosPorCategoria[categoriaFinal] || 0) +
-      Number(transacao.valor || 0);
-  });
-
-  const dadosGastosCategorias = categoriasObjetivo
-    .map((categoria) => ({
-      name: categoria,
-      value: gastosPorCategoria[categoria] || 0,
-    }))
-    .filter((categoria) => categoria.value > 0);
-
-  const dadosPerformance = meses.map(
-    (mes) =>
-      graficoMap[mes] || {
-        name: mes,
-        Entrada: 0,
-        Saida: 0,
-      },
-  );
-
-  const CORES_PIE = [
-    "#3b82f6",
-    "#ef4444",
-    "#10b981",
-    "#f59e0b",
-    "#8b5cf6",
-    "#ec4899",
-    "#06b6d4",
-  ];
-
-  const dadosCategorias = Object.keys(
-    despesasPorCategoria,
-  )
-    .map((categoria) => ({
-      name: categoria,
-      value: despesasPorCategoria[categoria],
-    }))
-    .filter((categoria) => categoria.value > 0)
-    .sort((a, b) => b.value - a.value);
-
-  const formatarMoeda = (valor: number) =>
-    new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    }).format(valor);
-
-  const formatarEixoY = (valor: number) =>
-    new Intl.NumberFormat("pt-BR", {
-      notation: "compact",
-      compactDisplay: "short",
-    }).format(valor);
-
-  const abrirConta = (conta: any) => {
-    setContaSelecionada(conta);
-  };
-
-  const fecharConta = () => {
-    setContaSelecionada(null);
-  };
-
-  const alternarStatusConta = (
-    id: string,
-    novoStatus: string,
-  ) => {
-    setTransacoes((transacoesAtuais) =>
-      transacoesAtuais.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              status: novoStatus,
-            }
-          : item,
-      ),
-    );
-
-    setContaSelecionada((contaAtual: any) =>
-      contaAtual
-        ? {
-            ...contaAtual,
-            status: novoStatus,
-          }
-        : contaAtual,
-    );
-  };
-
-  if (!montado) {
-    return null;
+    await loadDashboard();
   }
 
-  const cardEstilo =
-    "bg-white p-6 rounded-lg shadow-sm border border-gray-200 flex flex-col";
-
-  const periodos = [
+  const periods: Array<{
+    value: PeriodFilter;
+    label: string;
+  }> = [
     {
-      value: "hoje",
+      value: "today",
       label: "Hoje",
     },
     {
-      value: "semana",
+      value: "week",
       label: "Semana",
     },
     {
-      value: "mes",
+      value: "month",
       label: "Este mês",
     },
     {
-      value: "tudo",
+      value: "all",
       label: "Todo período",
     },
   ];
 
+  if (loading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-[#C8A15A]" />
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-6 pb-10 font-sans">
+    <div className="space-y-6 pb-10">
       <div className="flex justify-center">
         <div className="flex max-w-full items-center gap-1 overflow-x-auto rounded-2xl border border-[#0D1B2A]/10 bg-white/80 p-1.5 shadow-sm backdrop-blur">
-          {periodos.map((periodo) => {
-            const ativo =
-              filtroPeriodo === periodo.value;
+          {periods.map((period) => {
+            const active =
+              periodFilter ===
+              period.value;
 
             return (
               <button
-                key={periodo.value}
+                key={period.value}
                 type="button"
                 onClick={() =>
-                  setFiltroPeriodo(periodo.value)
+                  setPeriodFilter(
+                    period.value,
+                  )
                 }
-                aria-pressed={ativo}
                 className={[
-                  "shrink-0 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-200",
-                  ativo
+                  "shrink-0 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all",
+                  active
                     ? "bg-[#0D1B2A] text-[#F7F5EF] shadow-md"
                     : "text-[#3A3A3C]/70 hover:bg-[#C8A15A]/10 hover:text-[#0D1B2A]",
                 ].join(" ")}
               >
-                {periodo.label}
+                {period.label}
               </button>
             );
           })}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
-        <div className={cardEstilo}>
-          <div className="mb-4 flex items-center justify-between">
-            <span className="text-sm font-medium text-gray-600">
-              Entradas
-            </span>
-
-            <ArrowUpCircle
-              className="text-green-500"
-              size={20}
-            />
-          </div>
-
-          <h3 className="text-3xl font-semibold tracking-tight text-gray-900">
-            {formatarMoeda(entrada)}
-          </h3>
+      {error && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
         </div>
+      )}
 
-        <div className={cardEstilo}>
-          <div className="mb-4 flex items-center justify-between">
-            <span className="text-sm font-medium text-gray-600">
-              Saídas
-            </span>
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+        <MetricCard
+          label="Disponível"
+          value={metrics.available}
+          icon={Wallet}
+          variant="default"
+        />
 
-            <ArrowDownCircle
-              className="text-red-500"
-              size={20}
-            />
-          </div>
+        <MetricCard
+          label="Entradas"
+          value={metrics.income}
+          icon={ArrowUpCircle}
+          variant="positive"
+        />
 
-          <h3 className="text-3xl font-semibold tracking-tight text-gray-900">
-            {formatarMoeda(saida)}
-          </h3>
-        </div>
+        <MetricCard
+          label="Saídas"
+          value={metrics.expense}
+          icon={ArrowDownCircle}
+          variant="negative"
+        />
 
-        <div className={cardEstilo}>
-          <div className="mb-4 flex items-center justify-between">
-            <span className="text-sm font-medium text-gray-600">
-              Caixa
-            </span>
+        <MetricCard
+          label="A receber"
+          value={metrics.receivable}
+          icon={Receipt}
+          variant="positive"
+        />
 
-            <Wallet
-              className="text-blue-600"
-              size={20}
-            />
-          </div>
+        <MetricCard
+          label="A pagar"
+          value={metrics.payable}
+          icon={Clock}
+          variant={
+            metrics.overdue > 0
+              ? "negative"
+              : "warning"
+          }
+          detail={
+            metrics.overdue > 0
+              ? `${formatCurrency(
+                  metrics.overdue,
+                )} em atraso`
+              : undefined
+          }
+        />
 
-          <h3
-            className={[
-              "text-3xl font-semibold tracking-tight",
-              saldo >= 0
-                ? "text-gray-900"
-                : "text-red-600",
-            ].join(" ")}
-          >
-            {formatarMoeda(saldo)}
-          </h3>
-        </div>
+        <MetricCard
+          label="Investido"
+          value={metrics.invested}
+          icon={PiggyBank}
+          variant="gold"
+        />
+      </section>
 
-        <div
-          className={`${cardEstilo} border-emerald-200 bg-emerald-50`}
-        >
-          <div className="mb-4 flex items-center justify-between">
-            <span className="text-sm font-medium text-emerald-700">
-              A receber (Mês seguinte)
-            </span>
-
-            <Receipt
-              className="text-emerald-600"
-              size={20}
-            />
-          </div>
-
-          <h3 className="text-3xl font-semibold tracking-tight text-emerald-900 tabular-nums">
-            {formatarMoeda(aReceberProximoMes)}
-          </h3>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-        <div
-          className={`${cardEstilo} xl:col-span-2`}
-        >
-          <h2 className="mb-6 text-base font-semibold text-gray-900">
-            Fluxo de Caixa Mensal
+      <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+        <article className="rounded-2xl border border-[#0D1B2A]/10 bg-white p-5 shadow-sm xl:col-span-2">
+          <h2 className="text-lg font-semibold text-[#0D1B2A]">
+            Fluxo financeiro mensal
           </h2>
 
-          <div className="h-72 w-full min-w-0">
+          <p className="mt-1 text-sm text-[#3A3A3C]/60">
+            Entradas e saídas realizadas no ano atual.
+          </p>
+
+          <div className="mt-6 h-72 min-w-0">
             <ResponsiveContainer
               width="100%"
               height="100%"
             >
               <BarChart
-                data={dadosPerformance}
+                data={monthlyChartData}
                 margin={{
                   top: 10,
                   right: 10,
-                  left: 10,
+                  left: 0,
                   bottom: 0,
                 }}
               >
                 <CartesianGrid
                   strokeDasharray="3 3"
                   vertical={false}
-                  stroke="#e5e7eb"
+                  stroke="#E5E7EB"
                 />
 
                 <XAxis
@@ -740,82 +857,96 @@ export default function DashboardPage() {
                   axisLine={false}
                   tickLine={false}
                   tick={{
-                    fill: "#6b7280",
+                    fill: "#6B7280",
                     fontSize: 12,
                   }}
-                  dy={10}
                 />
 
                 <YAxis
                   axisLine={false}
                   tickLine={false}
                   tick={{
-                    fill: "#6b7280",
+                    fill: "#6B7280",
                     fontSize: 12,
                   }}
-                  tickFormatter={formatarEixoY}
+                  tickFormatter={
+                    formatCompactCurrency
+                  }
                 />
 
                 <RechartsTooltip
-                  cursor={{
-                    fill: "#f3f4f6",
-                  }}
+                  formatter={(
+                    value: number,
+                  ) =>
+                    formatCurrency(value)
+                  }
                   contentStyle={{
-                    borderRadius: "8px",
-                    border: "1px solid #e5e7eb",
+                    borderRadius: "12px",
+                    border:
+                      "1px solid #E5E7EB",
                     boxShadow:
-                      "0 4px 12px rgba(0,0,0,0.05)",
-                    fontSize: "13px",
+                      "0 8px 30px rgba(13,27,42,.08)",
                   }}
                 />
 
                 <Bar
-                  dataKey="Entrada"
-                  fill="#10b981"
-                  radius={[4, 4, 0, 0]}
-                  barSize={16}
+                  dataKey="Entradas"
+                  fill="#047857"
+                  radius={[5, 5, 0, 0]}
+                  barSize={18}
                 />
 
                 <Bar
-                  dataKey="Saida"
-                  fill="#ef4444"
-                  radius={[4, 4, 0, 0]}
-                  barSize={16}
+                  dataKey="Saídas"
+                  fill="#B91C1C"
+                  radius={[5, 5, 0, 0]}
+                  barSize={18}
                 />
               </BarChart>
             </ResponsiveContainer>
           </div>
-        </div>
+        </article>
 
-        <div className={cardEstilo}>
-          <h2 className="mb-2 text-base font-semibold text-gray-900">
-            Distribuição de Gastos
+        <article className="rounded-2xl border border-[#0D1B2A]/10 bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-semibold text-[#0D1B2A]">
+            Gastos por categoria
           </h2>
 
-          {dadosGastosCategorias.length > 0 ? (
-            <div className="mt-4 flex flex-1 flex-col items-center justify-center">
-              <div className="h-48 w-full min-w-0">
+          <p className="mt-1 text-sm text-[#3A3A3C]/60">
+            Distribuição das despesas realizadas.
+          </p>
+
+          {categoryChartData.length ===
+          0 ? (
+            <div className="flex h-72 items-center justify-center text-sm text-[#3A3A3C]/50">
+              Nenhuma despesa no período.
+            </div>
+          ) : (
+            <>
+              <div className="mt-4 h-44 min-w-0">
                 <ResponsiveContainer
                   width="100%"
                   height="100%"
                 >
                   <PieChart>
                     <Pie
-                      data={dadosGastosCategorias}
-                      innerRadius={55}
-                      outerRadius={75}
-                      paddingAngle={2}
+                      data={
+                        categoryChartData
+                      }
                       dataKey="value"
+                      innerRadius={48}
+                      outerRadius={70}
+                      paddingAngle={2}
                       stroke="none"
                     >
-                      {dadosGastosCategorias.map(
+                      {categoryChartData.map(
                         (_, index) => (
                           <Cell
-                            key={`cell-${index}`}
+                            key={index}
                             fill={
-                              CORES_PIE[
+                              PIE_COLORS[
                                 index %
-                                  CORES_PIE.length
+                                  PIE_COLORS.length
                               ]
                             }
                           />
@@ -824,305 +955,260 @@ export default function DashboardPage() {
                     </Pie>
 
                     <RechartsTooltip
-                      formatter={(value: any) =>
-                        formatarMoeda(Number(value))
+                      formatter={(
+                        value: number,
+                      ) =>
+                        formatCurrency(
+                          value,
+                        )
                       }
-                      contentStyle={{
-                        borderRadius: "8px",
-                        border: "none",
-                        boxShadow:
-                          "0 4px 12px rgba(0,0,0,0.08)",
-                        fontSize: "13px",
-                      }}
                     />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
 
-              <div className="mt-6 w-full space-y-3">
-                {dadosGastosCategorias.map(
-                  (categoria, index) => {
-                    const totalGasto = Object.values(
-                      gastosPorCategoria,
-                    ).reduce(
-                      (acc, valorAtual) =>
-                        acc + valorAtual,
-                      0,
-                    );
-
-                    const porcentagem =
-                      totalGasto > 0
-                        ? (
-                            (categoria.value /
-                              totalGasto) *
-                            100
-                          ).toFixed(1)
-                        : "0.0";
-
-                    return (
+              <div className="mt-4 space-y-3">
+                {categoryChartData
+                  .slice(0, 6)
+                  .map(
+                    (
+                      category,
+                      index,
+                    ) => (
                       <div
-                        key={`${categoria.name}-${index}`}
-                        className="flex justify-between text-sm"
+                        key={
+                          category.name
+                        }
+                        className="flex items-center justify-between gap-4 text-sm"
                       >
-                        <div className="flex items-center gap-2">
-                          <div
-                            className="h-2.5 w-2.5 rounded-full"
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span
+                            className="h-2.5 w-2.5 shrink-0 rounded-full"
                             style={{
                               backgroundColor:
-                                CORES_PIE[
+                                PIE_COLORS[
                                   index %
-                                    CORES_PIE.length
+                                    PIE_COLORS.length
                                 ],
                             }}
                           />
 
-                          <span className="capitalize text-gray-600">
-                            {categoria.name}
+                          <span className="truncate text-[#3A3A3C]/70">
+                            {
+                              category.name
+                            }
                           </span>
                         </div>
 
-                        <span className="font-medium text-gray-900">
-                          {porcentagem}%
-                        </span>
-                      </div>
-                    );
-                  },
-                )}
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-1 items-center justify-center text-sm text-gray-400">
-              Dados insuficientes.
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div
-        className={`${cardEstilo} justify-start`}
-      >
-        <div className="mb-6 flex items-center gap-2">
-          <AlertCircle
-            className="text-gray-500"
-            size={18}
-            strokeWidth={2.5}
-          />
-
-          <h2 className="text-base font-semibold text-gray-900">
-            Contas Pendentes
-          </h2>
-        </div>
-
-        <div className="space-y-3">
-          {lembretes.length > 0 ? (
-            lembretes.map((lembrete) => {
-              const vencido = isAfter(
-                hoje,
-                getSafeDate(
-                  lembrete.data_vencimento,
-                ),
-              );
-
-              return (
-                <button
-                  type="button"
-                  onClick={() =>
-                    abrirConta(lembrete)
-                  }
-                  key={lembrete.id}
-                  className="group flex w-full cursor-pointer items-center justify-between rounded-lg border border-gray-200 p-3.5 text-left transition-all hover:border-blue-300 hover:bg-blue-50"
-                >
-                  <div className="flex items-center gap-4">
-                    <div
-                      className={[
-                        "h-2 w-2 rounded-full",
-                        vencido
-                          ? "bg-red-500"
-                          : "bg-amber-400",
-                      ].join(" ")}
-                    />
-
-                    <div>
-                      <p className="text-sm font-medium text-gray-900 group-hover:text-blue-700">
-                        {lembrete.nome ||
-                          lembrete.descricao}
-                      </p>
-
-                      <div className="mt-0.5 flex items-center gap-1 text-[11px] uppercase tracking-wide text-gray-500">
-                        <Clock size={10} />
-
-                        <span>
-                          Vencimento:{" "}
-                          {format(
-                            getSafeDate(
-                              lembrete.data_vencimento,
-                            ),
-                            "dd/MM/yyyy",
+                        <span className="shrink-0 font-semibold text-[#0D1B2A]">
+                          {formatCurrency(
+                            category.value,
                           )}
                         </span>
                       </div>
-                    </div>
-                  </div>
+                    ),
+                  )}
+              </div>
+            </>
+          )}
+        </article>
+      </section>
 
-                  <div className="flex items-center gap-3 text-right">
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">
-                        {formatarMoeda(
-                          lembrete.valor,
+      <section className="rounded-2xl border border-[#0D1B2A]/10 bg-white p-5 shadow-sm">
+        <div className="flex items-center gap-2">
+          <AlertCircle
+            size={19}
+            className="text-[#C8A15A]"
+          />
+
+          <h2 className="text-lg font-semibold text-[#0D1B2A]">
+            Movimentações pendentes
+          </h2>
+        </div>
+
+        {pendingTransactions.length ===
+        0 ? (
+          <div className="py-10 text-center text-sm text-[#3A3A3C]/50">
+            Nenhuma movimentação pendente.
+          </div>
+        ) : (
+          <div className="mt-5 divide-y divide-[#0D1B2A]/8">
+            {pendingTransactions.map(
+              (transaction) => {
+                const status =
+                  getEffectiveStatus(
+                    transaction,
+                  );
+
+                const isIncome =
+                  transaction.type ===
+                  "income";
+
+                return (
+                  <div
+                    key={transaction.id}
+                    className="flex flex-col gap-4 py-4 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={[
+                            "h-2.5 w-2.5 rounded-full",
+                            status ===
+                            "overdue"
+                              ? "bg-red-500"
+                              : "bg-amber-400",
+                          ].join(" ")}
+                        />
+
+                        <p className="truncate font-medium text-[#0D1B2A]">
+                          {
+                            transaction.description
+                          }
+                        </p>
+                      </div>
+
+                      <p className="mt-1 pl-4 text-xs text-[#3A3A3C]/55">
+                        {isIncome
+                          ? "A receber"
+                          : "A pagar"}{" "}
+                        •{" "}
+                        {formatDate(
+                          transaction.due_date,
                         )}
                       </p>
-
-                      {vencido ? (
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-red-500">
-                          Atrasado
-                        </span>
-                      ) : (
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600">
-                          Aguardando
-                        </span>
-                      )}
                     </div>
 
-                    <Wallet
-                      size={16}
-                      className="text-gray-400 group-hover:text-blue-600"
-                    />
+                    <div className="flex items-center justify-between gap-4 sm:justify-end">
+                      <span
+                        className={[
+                          "font-semibold",
+                          isIncome
+                            ? "text-emerald-700"
+                            : "text-red-700",
+                        ].join(" ")}
+                      >
+                        {formatCurrency(
+                          transaction.amount,
+                        )}
+                      </span>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void markAsPaid(
+                            transaction,
+                          )
+                        }
+                        disabled={
+                          updatingId ===
+                          transaction.id
+                        }
+                        className="flex h-9 items-center gap-2 rounded-lg bg-[#0D1B2A] px-3 text-xs font-semibold text-white disabled:opacity-60"
+                      >
+                        {updatingId ===
+                        transaction.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <CheckCircle2
+                            size={15}
+                          />
+                        )}
+
+                        Realizar
+                      </button>
+                    </div>
                   </div>
-                </button>
-              );
-            })
-          ) : (
-            <div className="py-6 text-center text-sm text-gray-400">
-              Sem pendências registradas.
-            </div>
-          )}
-        </div>
+                );
+              },
+            )}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+type MetricCardProps = {
+  label: string;
+  value: number;
+  icon: typeof Wallet;
+  variant:
+    | "default"
+    | "positive"
+    | "negative"
+    | "warning"
+    | "gold";
+  detail?: string;
+};
+
+function MetricCard({
+  label,
+  value,
+  icon: Icon,
+  variant,
+  detail,
+}: MetricCardProps) {
+  const styles = {
+    default: {
+      icon: "text-[#0D1B2A]",
+      value: "text-[#0D1B2A]",
+      background: "bg-white",
+    },
+    positive: {
+      icon: "text-emerald-700",
+      value: "text-emerald-800",
+      background: "bg-white",
+    },
+    negative: {
+      icon: "text-red-700",
+      value: "text-red-800",
+      background: "bg-white",
+    },
+    warning: {
+      icon: "text-amber-700",
+      value: "text-[#0D1B2A]",
+      background: "bg-white",
+    },
+    gold: {
+      icon: "text-[#C8A15A]",
+      value: "text-[#0D1B2A]",
+      background: "bg-white",
+    },
+  }[variant];
+
+  return (
+    <article
+      className={[
+        "rounded-2xl border border-[#0D1B2A]/10 p-5 shadow-sm",
+        styles.background,
+      ].join(" ")}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-[#3A3A3C]/65">
+          {label}
+        </p>
+
+        <Icon
+          size={19}
+          className={styles.icon}
+        />
       </div>
 
-      {contaSelecionada && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 p-4">
-          <div className="w-full max-w-md rounded-xl border border-gray-200 bg-white p-6 shadow-2xl">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">
-                  {contaSelecionada.nome ||
-                    contaSelecionada.descricao}
-                </h3>
+      <p
+        className={[
+          "mt-3 text-2xl font-semibold tracking-tight",
+          styles.value,
+        ].join(" ")}
+      >
+        {formatCurrency(value)}
+      </p>
 
-                <p className="mt-1 text-sm text-gray-600">
-                  {contaSelecionada.descricao ||
-                    "Detalhes da conta pendente"}
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={fecharConta}
-                className="rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
-                aria-label="Fechar detalhes"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="mt-6 space-y-3 text-sm text-gray-700">
-              <div className="flex justify-between">
-                <span className="text-gray-500">
-                  Valor
-                </span>
-
-                <span className="font-semibold text-gray-900">
-                  {formatarMoeda(
-                    Number(
-                      contaSelecionada.valor || 0,
-                    ),
-                  )}
-                </span>
-              </div>
-
-              <div className="flex justify-between">
-                <span className="text-gray-500">
-                  Vencimento
-                </span>
-
-                <span className="font-semibold text-gray-900">
-                  {format(
-                    getSafeDate(
-                      contaSelecionada.data_vencimento,
-                    ),
-                    "dd/MM/yyyy",
-                  )}
-                </span>
-              </div>
-
-              <div className="flex justify-between">
-                <span className="text-gray-500">
-                  Categoria
-                </span>
-
-                <span className="font-semibold text-gray-900">
-                  {contaSelecionada.categoria ||
-                    "Sem categoria"}
-                </span>
-              </div>
-
-              <div className="flex justify-between">
-                <span className="text-gray-500">
-                  Status
-                </span>
-
-                <span
-                  className={[
-                    "font-semibold",
-                    contaSelecionada.status?.toLowerCase() ===
-                      "pago" ||
-                    contaSelecionada.status?.toLowerCase() ===
-                      "recebido"
-                      ? "text-emerald-600"
-                      : "text-amber-600",
-                  ].join(" ")}
-                >
-                  {contaSelecionada.status ||
-                    "Pendente"}
-                </span>
-              </div>
-            </div>
-
-            <div className="mt-6 flex gap-3">
-              <button
-                type="button"
-                onClick={() =>
-                  alternarStatusConta(
-                    contaSelecionada.id,
-                    contaSelecionada.status?.toLowerCase() ===
-                      "pago" ||
-                      contaSelecionada.status?.toLowerCase() ===
-                        "recebido"
-                      ? "Pendente"
-                      : "Pago",
-                  )
-                }
-                className="flex-1 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
-              >
-                {contaSelecionada.status?.toLowerCase() ===
-                  "pago" ||
-                contaSelecionada.status?.toLowerCase() ===
-                  "recebido"
-                  ? "Marcar como pendente"
-                  : "Marcar como pago"}
-              </button>
-
-              <button
-                type="button"
-                onClick={fecharConta}
-                className="flex-1 rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
-              >
-                Fechar
-              </button>
-            </div>
-          </div>
-        </div>
+      {detail && (
+        <p className="mt-2 text-xs font-medium text-red-600">
+          {detail}
+        </p>
       )}
-    </div>
+    </article>
   );
 }
