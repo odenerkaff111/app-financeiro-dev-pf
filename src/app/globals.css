@@ -56,3 +56,37 @@ select {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(107, 114, 128, 0.5);
 }
+.top-nav-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.top-nav-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+@keyframes page-route-enter {
+  from {
+    opacity: 0;
+    transform: translateX(18px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.page-route-enter {
+  animation: page-route-enter 260ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-route-enter {
+    animation: none;
+  }
+
+  html {
+    scroll-behavior: auto;
+  }
+}
