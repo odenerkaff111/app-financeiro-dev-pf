@@ -3,6 +3,7 @@
 import Link from "next/link";
 import {
   CircleDollarSign,
+  HandCoins,
   LayoutDashboard,
   Loader2,
   LogOut,
@@ -10,8 +11,14 @@ import {
   WalletCards,
   type LucideIcon,
 } from "lucide-react";
-import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import {
+  usePathname,
+  useRouter,
+} from "next/navigation";
+import {
+  useEffect,
+  useState,
+} from "react";
 import { supabase } from "@/lib/supabase";
 
 type NavigationItem = {
@@ -37,6 +44,11 @@ const navigationItems: NavigationItem[] = [
     href: "/registros",
     label: "Movimentações",
     icon: CircleDollarSign,
+  },
+  {
+    href: "/dividas",
+    label: "Dívidas",
+    icon: HandCoins,
   },
   {
     href: "/configuracoes",
@@ -167,7 +179,7 @@ export function AppDock() {
           disabled={loggingOut}
           aria-label="Sair da conta"
           title="Sair"
-          className="group relative flex h-12 w-12 items-center justify-center rounded-[16px] text-[#F7F5EF]/75 transition-all duration-200 hover:-translate-y-1.5 hover:scale-105 hover:bg-red-500/15 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-50"
+          className="group relative flex h-12 w-12 items-center justify-center rounded-[16px] text-[#F7F5EF]/75 transition-all duration-200 hover:-translate-y-1.5 hover:scale-105 hover:bg-red-500/15 hover:text-red-200 disabled:opacity-50"
         >
           {loggingOut ? (
             <Loader2 className="h-[21px] w-[21px] animate-spin" />
