@@ -1,15 +1,21 @@
 ﻿@import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #111827;
+  --umso-navy: #0d1b2a;
+  --umso-gold: #c8a15a;
+  --umso-ivory: #f7f5ef;
+  --umso-graphite: #3a3a3c;
+
+  --background: var(--umso-ivory);
+  --foreground: var(--umso-navy);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+
+  --font-sans: var(--font-montserrat);
+  --font-serif: var(--font-cormorant);
 }
 
 * {
@@ -17,14 +23,42 @@
 }
 
 html {
-  background: #ffffff;
+  min-height: 100%;
+  background: var(--umso-ivory);
+  scroll-behavior: smooth;
 }
 
 body {
   min-height: 100vh;
-  background: #ffffff;
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+  background:
+    radial-gradient(
+      circle at 10% 8%,
+      rgba(200, 161, 90, 0.08),
+      transparent 28%
+    ),
+    var(--umso-ivory);
+  color: var(--umso-navy);
+  font-family:
+    var(--font-montserrat),
+    Montserrat,
+    Arial,
+    Helvetica,
+    sans-serif;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+h4,
+.font-brand-serif {
+  font-family:
+    var(--font-cormorant),
+    "Cormorant Garamond",
+    Georgia,
+    serif;
 }
 
 input,
@@ -34,59 +68,119 @@ select {
   font: inherit;
 }
 
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
 ::selection {
-  background: rgba(59, 130, 246, 0.2);
-  color: #111827;
+  background: rgba(200, 161, 90, 0.32);
+  color: var(--umso-navy);
 }
 
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 9px;
+  height: 9px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #ffffff;
+  background: var(--umso-ivory);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(107, 114, 128, 0.3);
+  border: 2px solid var(--umso-ivory);
   border-radius: 999px;
+  background: rgba(13, 27, 42, 0.24);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(107, 114, 128, 0.5);
-}
-.top-nav-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+  background: rgba(13, 27, 42, 0.4);
 }
 
-.top-nav-scrollbar::-webkit-scrollbar {
-  display: none;
+.app-surface {
+  border: 1px solid rgba(200, 161, 90, 0.22);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.74);
+  box-shadow:
+    0 22px 70px rgba(13, 27, 42, 0.07),
+    inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(18px);
+}
+
+.app-card {
+  border: 1px solid rgba(13, 27, 42, 0.09);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 12px 35px rgba(13, 27, 42, 0.06);
+}
+
+.app-card-dark {
+  border: 1px solid rgba(200, 161, 90, 0.26);
+  border-radius: 20px;
+  background:
+    linear-gradient(
+      145deg,
+      rgba(20, 39, 58, 0.98),
+      rgba(13, 27, 42, 1)
+    );
+  color: var(--umso-ivory);
+  box-shadow: 0 18px 50px rgba(13, 27, 42, 0.22);
+}
+
+.app-eyebrow {
+  color: var(--umso-gold);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+}
+
+.app-title {
+  color: var(--umso-navy);
+  font-family:
+    var(--font-cormorant),
+    "Cormorant Garamond",
+    Georgia,
+    serif;
+  font-size: clamp(2rem, 4vw, 3.2rem);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 0.96;
+}
+
+.app-divider {
+  height: 1px;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(200, 161, 90, 0),
+      rgba(200, 161, 90, 0.72),
+      rgba(200, 161, 90, 0)
+    );
 }
 
 @keyframes page-route-enter {
   from {
     opacity: 0;
-    transform: translateX(18px);
+    transform: translateY(10px) scale(0.995);
   }
 
   to {
     opacity: 1;
-    transform: translateX(0);
+    transform: translateY(0) scale(1);
   }
 }
 
 .page-route-enter {
-  animation: page-route-enter 260ms ease-out both;
+  animation: page-route-enter 280ms ease-out both;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .page-route-enter {
-    animation: none;
-  }
-
   html {
     scroll-behavior: auto;
+  }
+
+  .page-route-enter {
+    animation: none;
   }
 }
