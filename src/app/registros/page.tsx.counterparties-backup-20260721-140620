@@ -167,58 +167,9 @@ const TYPE_OPTIONS: TypeOption[] = [
 
 
 const MERCHANT_OPTIONS = [
-  // Pessoas para quem existem dívidas pessoais
-  "SAMUEL",
-  "VALDETE",
-  "GU",
-  "DIRCE",
-  "ATLIMARJOM",
-  "MARCELA",
-  "JOSÉ GERALDO",
-  "MARIA",
-  "VANDA",
-  "Mary",
-
-  // Moradia e contas da casa
-  "Sr. Jurandir",
-  "Copasa",
-  "Cemig",
-  "Vanete",
-
-  // Educação
-  "Ipê Amarelo",
-
-  // Renda
   "Power of Data",
-
-  // Supermercados e compras
-  "Supernosso",
-  "Verdemar",
-  "ABC",
-  "Atacadão",
-  "Mercado Livre",
-  "Amazon",
-
-  // Cuidados pessoais e saúde
-  "Ricoy Barber",
-  "Allp Fit",
-
-  // Transporte e financiamento
-  "Uber",
-  "BV",
-
-  // Investimentos
-  "Rico",
-
-  // Empréstimos e crédito
-  "Blipay",
-  "Ágil",
-  "Zippi",
-  "Brasilcard",
-  "Facio",
-].sort((first, second) =>
-  first.localeCompare(second, "pt-BR"),
-);
+  "Cemig",
+] as const;
 
 function getToday() {
   const now = new Date();
