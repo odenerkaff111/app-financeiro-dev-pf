@@ -7,6 +7,7 @@ import {
   Loader2,
   LogOut,
   Settings,
+  WalletCards,
   type LucideIcon,
 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
@@ -28,6 +29,11 @@ const navigationItems: NavigationItem[] = [
     exact: true,
   },
   {
+    href: "/contas",
+    label: "Contas e cartões",
+    icon: WalletCards,
+  },
+  {
     href: "/registros",
     label: "Movimentações",
     icon: CircleDollarSign,
@@ -43,39 +49,50 @@ export function AppDock() {
   const pathname = usePathname();
   const router = useRouter();
 
-  const [loggingOut, setLoggingOut] = useState(false);
+  const [loggingOut, setLoggingOut] =
+    useState(false);
 
   useEffect(() => {
-    const animationFrame = window.requestAnimationFrame(() => {
-      window.scrollTo({
-        top: 0,
-        behavior: "smooth",
+    const animationFrame =
+      window.requestAnimationFrame(() => {
+        window.scrollTo({
+          top: 0,
+          behavior: "smooth",
+        });
       });
-    });
 
     return () => {
-      window.cancelAnimationFrame(animationFrame);
+      window.cancelAnimationFrame(
+        animationFrame,
+      );
     };
   }, [pathname]);
 
-  function isItemActive(item: NavigationItem) {
+  function isItemActive(
+    item: NavigationItem,
+  ) {
     if (item.exact) {
       return pathname === item.href;
     }
 
     return (
       pathname === item.href ||
-      pathname.startsWith(`${item.href}/`)
+      pathname.startsWith(
+        `${item.href}/`,
+      )
     );
   }
 
   async function handleLogout() {
-    if (loggingOut) return;
+    if (loggingOut) {
+      return;
+    }
 
     setLoggingOut(true);
 
     try {
-      const { error } = await supabase.auth.signOut();
+      const { error } =
+        await supabase.auth.signOut();
 
       if (error) {
         throw error;
@@ -84,7 +101,11 @@ export function AppDock() {
       router.replace("/auth");
       router.refresh();
     } catch (error) {
-      console.error("Erro ao sair da conta:", error);
+      console.error(
+        "Erro ao sair da conta:",
+        error,
+      );
+
       setLoggingOut(false);
     }
   }
@@ -97,7 +118,8 @@ export function AppDock() {
       >
         {navigationItems.map((item) => {
           const Icon = item.icon;
-          const active = isItemActive(item);
+          const active =
+            isItemActive(item);
 
           return (
             <Link
@@ -106,7 +128,9 @@ export function AppDock() {
               scroll={false}
               aria-label={item.label}
               title={item.label}
-              aria-current={active ? "page" : undefined}
+              aria-current={
+                active ? "page" : undefined
+              }
               className={[
                 "group relative flex h-12 w-12 items-center justify-center rounded-[16px] transition-all duration-200",
                 "hover:-translate-y-1.5 hover:scale-105",
@@ -117,7 +141,9 @@ export function AppDock() {
             >
               <Icon
                 size={21}
-                strokeWidth={active ? 2.3 : 1.9}
+                strokeWidth={
+                  active ? 2.3 : 1.9
+                }
               />
 
               {active && (
@@ -135,7 +161,9 @@ export function AppDock() {
 
         <button
           type="button"
-          onClick={() => void handleLogout()}
+          onClick={() =>
+            void handleLogout()
+          }
           disabled={loggingOut}
           aria-label="Sair da conta"
           title="Sair"
@@ -144,7 +172,10 @@ export function AppDock() {
           {loggingOut ? (
             <Loader2 className="h-[21px] w-[21px] animate-spin" />
           ) : (
-            <LogOut size={21} strokeWidth={1.9} />
+            <LogOut
+              size={21}
+              strokeWidth={1.9}
+            />
           )}
 
           <span className="pointer-events-none absolute -top-10 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-[#0D1B2A] px-2.5 py-1.5 text-[11px] font-medium text-[#F7F5EF] opacity-0 shadow-lg transition group-hover:opacity-100">
