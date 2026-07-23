@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -6,6 +6,7 @@ import { Loader2 } from "lucide-react";
 import { getSessionOnce, supabase } from "@/lib/supabase";
 import { HouseholdProvider } from "@/contexts/HouseholdContext";
 import { AppDock } from "./AppDock";
+import { AssistantLauncher } from "./assistant/AssistantLauncher";
 
 export function AppLayout({
   children,
@@ -14,7 +15,6 @@ export function AppLayout({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-
   const isAuthPage = pathname?.startsWith("/auth");
 
   const [loading, setLoading] = useState(true);
@@ -34,7 +34,6 @@ export function AppLayout({
 
         if (error) {
           console.error("Erro ao verificar sessão:", error);
-
           setAuthenticated(false);
 
           if (!isAuthPage) {
@@ -46,7 +45,6 @@ export function AppLayout({
         }
 
         const hasSession = Boolean(session);
-
         setAuthenticated(hasSession);
 
         if (!hasSession && !isAuthPage) {
@@ -61,7 +59,7 @@ export function AppLayout({
 
         console.error(
           "Não foi possível conectar ao Supabase:",
-          error
+          error,
         );
 
         setAuthenticated(false);
@@ -78,21 +76,18 @@ export function AppLayout({
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        if (!active) return;
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!active) return;
 
-        const hasSession = Boolean(session);
+      const hasSession = Boolean(session);
+      setAuthenticated(hasSession);
 
-        setAuthenticated(hasSession);
-
-        if (!hasSession && !isAuthPage) {
-          router.replace("/auth");
-        } else if (hasSession && isAuthPage) {
-          router.replace("/");
-        }
+      if (!hasSession && !isAuthPage) {
+        router.replace("/auth");
+      } else if (hasSession && isAuthPage) {
+        router.replace("/");
       }
-    );
+    });
 
     return () => {
       active = false;
@@ -130,6 +125,7 @@ export function AppLayout({
           </div>
         </section>
 
+        <AssistantLauncher />
         <AppDock />
       </main>
     </HouseholdProvider>
