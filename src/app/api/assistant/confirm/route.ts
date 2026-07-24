@@ -286,6 +286,46 @@ export async function POST(request: Request) {
         typeof result.data === "string"
           ? result.data
           : null;
+
+      if (!resultId) {
+        throw new Error(
+          "O pagamento da dívida não retornou a movimentação criada.",
+        );
+      }
+
+      const debtCategoryResult = await supabase
+        .from("pf_categories")
+        .select("id")
+        .eq("household_id", message.household_id)
+        .eq("kind", "debt")
+        .limit(1)
+        .maybeSingle();
+
+      const creditor =
+        payload.creditor?.trim() || "Dívida pessoal";
+
+      const normalizeResult = await supabase
+        .from("pf_transactions")
+        .update({
+          type: "expense",
+          category_id: debtCategoryResult.data?.id ?? null,
+          description: `Pagamento de dívida - ${creditor}`,
+          merchant: creditor,
+          source: "ai",
+          metadata: {
+            origin: "financial_assistant",
+            assistant_message_id: message.id,
+            debt_payment: true,
+            debt_id: debtId,
+          },
+        })
+        .eq("id", resultId)
+        .eq("household_id", message.household_id);
+
+      if (normalizeResult.error) {
+        throw normalizeResult.error;
+      }
+
       successMessage =
         "Pagamento da dívida registrado com sucesso.";
     }

@@ -57,6 +57,31 @@ export type AssistantApiResponse = {
   model?: string;
 };
 
+export type StatementPreviewRow = {
+  fingerprint: string;
+  external_id: string | null;
+  occurred_on: string;
+  description: string;
+  amount: number;
+  signed_amount: number;
+  type: "income" | "expense";
+  category_id: string | null;
+  category_name: string | null;
+  duplicate: boolean;
+};
+
+export type StatementPreview = {
+  file_name: string;
+  account_id: string;
+  account_name: string;
+  rows: StatementPreviewRow[];
+  total_rows: number;
+  new_rows: number;
+  duplicate_rows: number;
+  total_income: number;
+  total_expense: number;
+};
+
 export function emptyPayload(): FinancialActionPayload {
   return {
     account_id: null,

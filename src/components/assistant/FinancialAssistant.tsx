@@ -5,6 +5,7 @@ import {
   Bot,
   ExternalLink,
   Loader2,
+  Paperclip,
   Send,
   Sparkles,
   UserRound,
@@ -26,6 +27,7 @@ import type {
   FinancialActionPayload,
   FinancialActionStatus,
   FinancialActionType,
+  StatementPreview,
 } from "@/lib/financial-actions";
 import {
   emptyPayload,
@@ -33,6 +35,7 @@ import {
   getActionProposalText,
 } from "@/lib/financial-actions";
 import { ProposedActionCard } from "./ProposedActionCard";
+import { StatementImportCard } from "./StatementImportCard";
 
 type Props = {
   variant?: "page" | "drawer";
@@ -104,8 +107,15 @@ export function FinancialAssistant({
   const [confirmingId, setConfirmingId] =
     useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [importAccountId, setImportAccountId] = useState("");
+  const [statementPreview, setStatementPreview] =
+    useState<StatementPreview | null>(null);
+  const [analyzingStatement, setAnalyzingStatement] = useState(false);
+  const [importingStatement, setImportingStatement] = useState(false);
   const endRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const loadAssistant = useCallback(async () => {
     setLoading(true);
@@ -239,7 +249,13 @@ export function FinancialAssistant({
       behavior: "smooth",
       block: "end",
     });
-  }, [messages, sending]);
+  }, [messages, sending, statementPreview, analyzingStatement]);
+
+  useEffect(() => {
+    if (!importAccountId && context.accounts[0]) {
+      setImportAccountId(context.accounts[0].id);
+    }
+  }, [context.accounts, importAccountId]);
 
   const history = useMemo(
     () =>
@@ -450,21 +466,10 @@ export function FinancialAssistant({
         ),
       );
 
-      const financialVersion = String(Date.now());
-
-      window.localStorage.setItem(
-        "pf:financial-data-version",
-        financialVersion,
-      );
-
-      window.dispatchEvent(
-        new CustomEvent("pf:financial-data-changed", {
-          detail: {
-            transactionId: body.resultId,
-            version: financialVersion,
-          },
-        }),
-      );
+      notifyFinancialDataChanged({
+        transactionId: body.resultId,
+        source: "assistant",
+      });
 
       const confirmationText =
         body.message || "Pronto. Registrei a movimentação.";
@@ -537,6 +542,175 @@ export function FinancialAssistant({
       ),
     );
     window.setTimeout(() => inputRef.current?.focus(), 50);
+  }
+
+  function notifyFinancialDataChanged(detail?: Record<string, unknown>) {
+    const version = String(Date.now());
+
+    window.localStorage.setItem(
+      "pf:financial-data-version",
+      version,
+    );
+
+    window.dispatchEvent(
+      new CustomEvent("pf:financial-data-changed", {
+        detail: {
+          version,
+          ...detail,
+        },
+      }),
+    );
+  }
+
+  function handleFileSelection(file: File | null) {
+    setError(null);
+    setStatementPreview(null);
+    setSelectedFile(file);
+
+    if (!importAccountId && context.accounts[0]) {
+      setImportAccountId(context.accounts[0].id);
+    }
+  }
+
+  function cancelStatementImport() {
+    setSelectedFile(null);
+    setStatementPreview(null);
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }
+
+  async function analyzeStatement() {
+    if (!selectedFile || !importAccountId || analyzingStatement) {
+      return;
+    }
+
+    setAnalyzingStatement(true);
+    setError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", selectedFile);
+      formData.append("householdId", household.id);
+      formData.append("accountId", importAccountId);
+
+      const response = await fetch(
+        "/api/assistant/import/preview",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${await accessToken()}`,
+          },
+          body: formData,
+        },
+      );
+
+      const body = (await response.json()) as
+        | StatementPreview
+        | { error?: string };
+
+      if (!response.ok) {
+        throw new Error(
+          "error" in body
+            ? body.error || "Não foi possível analisar o extrato."
+            : "Não foi possível analisar o extrato.",
+        );
+      }
+
+      setStatementPreview(body as StatementPreview);
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Não foi possível analisar o extrato.",
+      );
+    } finally {
+      setAnalyzingStatement(false);
+    }
+  }
+
+  async function confirmStatementImport() {
+    if (!statementPreview || importingStatement) {
+      return;
+    }
+
+    setImportingStatement(true);
+    setError(null);
+
+    try {
+      const response = await fetch(
+        "/api/assistant/import/confirm",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${await accessToken()}`,
+          },
+          body: JSON.stringify({
+            householdId: household.id,
+            accountId: statementPreview.account_id,
+            fileName: statementPreview.file_name,
+            rows: statementPreview.rows,
+          }),
+        },
+      );
+
+      const body = (await response.json()) as {
+        imported?: number;
+        duplicates?: number;
+        message?: string;
+        error?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(
+          body.error || "Não foi possível importar o extrato.",
+        );
+      }
+
+      const confirmationText =
+        body.message || "Extrato importado com sucesso.";
+
+      if (conversationId) {
+        const saveResult = await supabase
+          .from("pf_ai_messages")
+          .insert({
+            conversation_id: conversationId,
+            household_id: household.id,
+            role: "assistant",
+            content: confirmationText,
+            action_status: "none",
+            action_payload: {},
+          })
+          .select(
+            "id, role, content, action_type, action_status, action_payload, error_message",
+          )
+          .single();
+
+        if (!saveResult.error) {
+          setMessages((current) => [
+            ...current,
+            mapMessage(saveResult.data as unknown as MessageRow),
+          ]);
+        }
+      }
+
+      notifyFinancialDataChanged({
+        imported: body.imported ?? 0,
+        source: "statement_import",
+      });
+
+      cancelStatementImport();
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Não foi possível importar o extrato.",
+      );
+    } finally {
+      setImportingStatement(false);
+    }
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -663,6 +837,23 @@ export function FinancialAssistant({
               </div>
             ))}
 
+            {statementPreview && (
+              <div className="flex items-start gap-3">
+                <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#0D1B2A] text-[#C8A15A]">
+                  <Bot size={16} />
+                </div>
+
+                <div className="min-w-0 max-w-[92%] flex-1">
+                  <StatementImportCard
+                    preview={statementPreview}
+                    importing={importingStatement}
+                    onConfirm={() => void confirmStatementImport()}
+                    onCancel={cancelStatementImport}
+                  />
+                </div>
+              </div>
+            )}
+
             {sending && (
               <div className="flex items-center gap-3">
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#0D1B2A] text-[#C8A15A]">
@@ -688,7 +879,81 @@ export function FinancialAssistant({
             </p>
           )}
 
+          {selectedFile && !statementPreview && (
+            <div className="mb-3 rounded-2xl border border-[#C8A15A]/25 bg-[#F7F5EF] p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-[#0D1B2A]">
+                    {selectedFile.name}
+                  </p>
+                  <p className="text-[11px] text-[#3A3A3C]/50">
+                    Selecione a conta correspondente ao extrato.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={cancelStatementImport}
+                  disabled={analyzingStatement}
+                  className="rounded-lg p-2 text-[#3A3A3C]/50 hover:bg-white hover:text-[#0D1B2A]"
+                  aria-label="Cancelar arquivo"
+                >
+                  <X size={17} />
+                </button>
+              </div>
+
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                <select
+                  value={importAccountId}
+                  onChange={(event) =>
+                    setImportAccountId(event.target.value)
+                  }
+                  disabled={analyzingStatement}
+                  className="h-10 min-w-0 flex-1 rounded-xl border border-[#0D1B2A]/12 bg-white px-3 text-sm text-[#0D1B2A] outline-none"
+                >
+                  {context.accounts.map((account) => (
+                    <option key={account.id} value={account.id}>
+                      {account.name}
+                    </option>
+                  ))}
+                </select>
+
+                <button
+                  type="button"
+                  onClick={() => void analyzeStatement()}
+                  disabled={analyzingStatement || !importAccountId}
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-[#0D1B2A] px-4 text-sm font-semibold text-white disabled:opacity-50"
+                >
+                  {analyzingStatement && (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  )}
+                  Analisar extrato
+                </button>
+              </div>
+            </div>
+          )}
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".ofx,.csv,text/csv,application/x-ofx"
+            className="hidden"
+            onChange={(event) =>
+              handleFileSelection(event.target.files?.[0] ?? null)
+            }
+          />
+
           <div className="flex items-end gap-2 rounded-2xl border border-[#0D1B2A]/12 bg-[#F7F5EF] p-2 focus-within:border-[#C8A15A] focus-within:ring-2 focus-within:ring-[#C8A15A]/15">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={loading || sending || analyzingStatement || importingStatement}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[#3A3A3C]/55 transition hover:bg-white hover:text-[#0D1B2A] disabled:opacity-40"
+              aria-label="Importar OFX ou CSV"
+              title="Importar OFX ou CSV"
+            >
+              <Paperclip size={18} />
+            </button>
             <textarea
               ref={inputRef}
               value={input}

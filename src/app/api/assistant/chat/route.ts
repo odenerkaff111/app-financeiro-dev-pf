@@ -239,6 +239,19 @@ function createEmptyPayload(): FinancialActionPayload {
   };
 }
 
+function containsWholePhrase(
+  normalizedText: string,
+  normalizedPhrase: string,
+) {
+  if (!normalizedPhrase) {
+    return false;
+  }
+
+  return (` ${normalizedText} `).includes(
+    ` ${normalizedPhrase} `,
+  );
+}
+
 function findDebt(
   message: string,
   context: RequestContext,
@@ -246,14 +259,18 @@ function findDebt(
   const normalizedMessage =
     normalizeText(message);
 
-  return context.debts.find(
-    (debt) =>
-      normalizedMessage.includes(
-        normalizeText(
-          debt.creditor,
-        ),
+  return [...context.debts]
+    .sort(
+      (first, second) =>
+        normalizeText(second.creditor).length -
+        normalizeText(first.creditor).length,
+    )
+    .find((debt) =>
+      containsWholePhrase(
+        normalizedMessage,
+        normalizeText(debt.creditor),
       ),
-  );
+    );
 }
 
 function findAccount(
