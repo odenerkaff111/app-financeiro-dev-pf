@@ -19,6 +19,8 @@ export function AppLayout({
 
   const [loading, setLoading] = useState(true);
   const [authenticated, setAuthenticated] = useState(false);
+  const [financialDataVersion, setFinancialDataVersion] =
+    useState(0);
 
   useEffect(() => {
     let active = true;
@@ -95,6 +97,36 @@ export function AppLayout({
     };
   }, [isAuthPage, router]);
 
+  useEffect(() => {
+    function refreshFinancialData() {
+      setFinancialDataVersion(
+        (currentVersion) => currentVersion + 1,
+      );
+    }
+
+    function handleStorage(event: StorageEvent) {
+      if (event.key === "pf:financial-data-version") {
+        refreshFinancialData();
+      }
+    }
+
+    window.addEventListener(
+      "pf:financial-data-changed",
+      refreshFinancialData,
+    );
+
+    window.addEventListener("storage", handleStorage);
+
+    return () => {
+      window.removeEventListener(
+        "pf:financial-data-changed",
+        refreshFinancialData,
+      );
+
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, []);
+
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#F7F5EF]">
@@ -118,7 +150,7 @@ export function AppLayout({
 
         <section className="relative mx-auto w-full max-w-[1600px] px-4 pb-28 pt-5 sm:px-6 sm:pb-32 sm:pt-7 lg:px-8">
           <div
-            key={pathname}
+            key={`${pathname}-${financialDataVersion}`}
             className="page-route-enter min-w-0"
           >
             {children}

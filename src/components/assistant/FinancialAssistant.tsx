@@ -408,12 +408,34 @@ export function FinancialAssistant({
       });
 
       const body = (await response.json()) as {
+        success?: boolean;
+        resultId?: string | null;
         message?: string;
         error?: string;
       };
 
       if (!response.ok) {
         throw new Error(body.error || "Não foi possível confirmar.");
+      }
+
+      if (!body.resultId) {
+        throw new Error(
+          "A ação foi processada, mas a movimentação não retornou um identificador.",
+        );
+      }
+
+      const verification = await supabase
+        .from("pf_transactions")
+        .select("id, household_id, type, status, amount, occurred_on, source")
+        .eq("id", body.resultId)
+        .eq("household_id", household.id)
+        .maybeSingle();
+
+      if (verification.error || !verification.data) {
+        throw new Error(
+          verification.error?.message ||
+            "A movimentação não foi encontrada após a confirmação.",
+        );
       }
 
       setMessages((current) =>
@@ -426,6 +448,22 @@ export function FinancialAssistant({
               }
             : item,
         ),
+      );
+
+      const financialVersion = String(Date.now());
+
+      window.localStorage.setItem(
+        "pf:financial-data-version",
+        financialVersion,
+      );
+
+      window.dispatchEvent(
+        new CustomEvent("pf:financial-data-changed", {
+          detail: {
+            transactionId: body.resultId,
+            version: financialVersion,
+          },
+        }),
       );
 
       const confirmationText =
@@ -516,7 +554,7 @@ export function FinancialAssistant({
         "flex min-h-0 flex-col overflow-hidden bg-white",
         drawer
           ? "h-full"
-          : "min-h-[calc(100vh-12rem)] rounded-3xl border border-[#0D1B2A]/10 shadow-sm",
+          : "h-full min-h-0 rounded-3xl border border-[#0D1B2A]/10 shadow-sm",
       ].join(" ")}
     >
       <header className="flex shrink-0 items-center justify-between gap-4 border-b border-[#0D1B2A]/8 bg-[#F7F5EF] px-5 py-4">
@@ -555,7 +593,7 @@ export function FinancialAssistant({
         )}
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-5">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-5 sm:px-5">
         {loading ? (
           <div className="flex min-h-64 items-center justify-center">
             <Loader2 className="h-7 w-7 animate-spin text-[#C8A15A]" />

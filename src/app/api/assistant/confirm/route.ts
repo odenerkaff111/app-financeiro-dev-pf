@@ -290,6 +290,31 @@ export async function POST(request: Request) {
         "Pagamento da dívida registrado com sucesso.";
     }
 
+    if (!resultId) {
+      throw new Error(
+        "A ação não retornou o identificador da movimentação.",
+      );
+    }
+
+    const verificationResult = await supabase
+      .from("pf_transactions")
+      .select(
+        "id, household_id, type, status, amount, occurred_on, source",
+      )
+      .eq("id", resultId)
+      .eq("household_id", message.household_id)
+      .maybeSingle();
+
+    if (
+      verificationResult.error ||
+      !verificationResult.data
+    ) {
+      throw new Error(
+        verificationResult.error?.message ||
+          "A movimentação não foi encontrada depois de ser criada.",
+      );
+    }
+
     const updateResult = await supabase
       .from("pf_ai_messages")
       .update({
@@ -310,6 +335,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       resultId,
+      transaction: verificationResult.data,
       message: successMessage,
     });
   } catch (error) {
