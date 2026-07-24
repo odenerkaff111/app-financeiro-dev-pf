@@ -2,7 +2,8 @@ export type FinancialActionType =
   | "none"
   | "create_transaction"
   | "create_transfer"
-  | "register_debt_payment";
+  | "register_debt_payment"
+  | "register_debt_received";
 
 export type FinancialActionStatus =
   | "none"
@@ -121,6 +122,10 @@ export function actionTitle(
     return "Registrar pagamento de dívida";
   }
 
+  if (actionType === "register_debt_received") {
+    return "Registrar empréstimo recebido";
+  }
+
   if (actionType === "create_transfer") {
     return "Registrar transferência";
   }
@@ -149,6 +154,14 @@ export function getActionProposalText(
     return amount
       ? `Entendi. Vou registrar um pagamento de ${amount} para ${creditor}. Revise os dados abaixo antes de confirmar.`
       : `Entendi. Vou preparar o pagamento para ${creditor}. Revise os dados abaixo antes de confirmar.`;
+  }
+
+  if (actionType === "register_debt_received") {
+    const creditor = payload.creditor ?? "o credor informado";
+
+    return amount
+      ? `Entendi. Vou registrar um empréstimo recebido de ${amount} com ${creditor}. Revise os dados abaixo antes de confirmar.`
+      : `Entendi. Vou preparar o empréstimo recebido de ${creditor}. Revise os dados abaixo antes de confirmar.`;
   }
 
   if (actionType === "create_transfer") {
@@ -202,3 +215,169 @@ export function getActionCorrectionText(
     .filter(Boolean)
     .join(" ");
 }
+
+function normalizeFinancialText(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function containsWholeFinancialPhrase(
+  normalizedText: string,
+  normalizedPhrase: string,
+) {
+  if (!normalizedPhrase) return false;
+
+  return (` ${normalizedText} `).includes(
+    ` ${normalizedPhrase} `,
+  );
+}
+
+function parseFinancialAmount(message: string) {
+  const patterns = [
+    /r\$\s*(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)/i,
+    /(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*reais?/i,
+    /(?:peguei|recebi|emprestou|emprestado|empr[eé]stimo)\s+(?:de\s+)?(\d+(?:[.,]\d{1,2})?)/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = message.match(pattern);
+    if (!match?.[1]) continue;
+
+    const normalized = match[1].includes(",")
+      ? match[1].replace(/\./g, "").replace(",", ".")
+      : match[1];
+
+    const amount = Number(normalized);
+
+    if (Number.isFinite(amount) && amount > 0) {
+      return amount;
+    }
+  }
+
+  return null;
+}
+
+function todayInBrazil() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+export function tryParseDebtReceived(
+  message: string,
+  context: AssistantContext,
+): AssistantApiResponse | null {
+  const normalizedMessage = normalizeFinancialText(message);
+
+  const loanSignals = [
+    "peguei emprestado",
+    "peguei um emprestimo",
+    "peguei emprestimo",
+    "recebi emprestado",
+    "me emprestou",
+    "dinheiro emprestado",
+    "emprestado da",
+    "emprestado do",
+    "emprestimo da",
+    "emprestimo do",
+  ];
+
+  const looksLikeLoan = loanSignals.some((signal) =>
+    normalizedMessage.includes(signal),
+  );
+
+  if (!looksLikeLoan) return null;
+
+  const amount = parseFinancialAmount(message);
+
+  const debt = [...context.debts]
+    .sort(
+      (first, second) =>
+        normalizeFinancialText(second.creditor).length -
+        normalizeFinancialText(first.creditor).length,
+    )
+    .find((item) =>
+      containsWholeFinancialPhrase(
+        normalizedMessage,
+        normalizeFinancialText(item.creditor),
+      ),
+    );
+
+  const account = context.accounts.find((item) => {
+    const accountName = normalizeFinancialText(item.name);
+    const institutionName = item.institution_name
+      ? normalizeFinancialText(item.institution_name)
+      : "";
+
+    return (
+      containsWholeFinancialPhrase(
+        normalizedMessage,
+        accountName,
+      ) ||
+      (institutionName.length >= 3 &&
+        containsWholeFinancialPhrase(
+          normalizedMessage,
+          institutionName,
+        ))
+    );
+  });
+
+  if (!amount) {
+    return {
+      reply: "Qual foi o valor que você pegou emprestado?",
+      action_type: "none",
+      action_payload: emptyPayload(),
+      model: "deterministic-parser",
+    };
+  }
+
+  if (!debt) {
+    return {
+      reply: `De quem você pegou ${formatCurrency(amount)} emprestado?`,
+      action_type: "none",
+      action_payload: emptyPayload(),
+      model: "deterministic-parser",
+    };
+  }
+
+  if (!account) {
+    return {
+      reply: `Em qual conta entraram os ${formatCurrency(amount)} emprestados por ${debt.creditor}?`,
+      action_type: "none",
+      action_payload: emptyPayload(),
+      model: "deterministic-parser",
+    };
+  }
+
+  return {
+    reply: `Entendi. Vou registrar um empréstimo recebido de ${formatCurrency(amount)} com ${debt.creditor}. Revise os dados abaixo antes de confirmar.`,
+    action_type: "register_debt_received",
+    action_payload: {
+      account_id: account.id,
+      account_name: account.name,
+      destination_account_id: null,
+      destination_account_name: null,
+      category_id: null,
+      category_name: null,
+      debt_id: debt.id,
+      creditor: debt.creditor,
+      type: null,
+      amount,
+      description: `Empréstimo recebido - ${debt.creditor}`,
+      merchant: debt.creditor,
+      occurred_on: todayInBrazil(),
+      notes: "Empréstimo recebido informado no chat.",
+      count_installment: null,
+    },
+    model: "deterministic-parser",
+  };
+}
+

@@ -33,6 +33,7 @@ import {
   emptyPayload,
   getActionCorrectionText,
   getActionProposalText,
+  tryParseDebtReceived,
 } from "@/lib/financial-actions";
 import { ProposedActionCard } from "./ProposedActionCard";
 import { StatementImportCard } from "./StatementImportCard";
@@ -331,33 +332,79 @@ export function FinancialAssistant({
         })
         .eq("id", conversationId);
 
-      const response = await fetch("/api/assistant/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${await accessToken()}`,
-        },
-        body: JSON.stringify({
-          message: text,
-          householdId: household.id,
-          history,
-          context,
-        }),
-      });
+      const lastAssistantMessage = [...messages]
+        .reverse()
+        .find((message) => message.role === "assistant");
 
-      const body = (await response.json()) as
-        | AssistantApiResponse
-        | { error?: string };
+      const lastUserMessage = [...messages]
+        .reverse()
+        .find((message) => message.role === "user");
 
-      if (!response.ok) {
-        throw new Error(
-          "error" in body
-            ? body.error || "A IA não conseguiu responder."
-            : "A IA não conseguiu responder.",
+      const shouldCombineLoanFollowUp =
+        lastAssistantMessage?.content.startsWith(
+          "Em qual conta entraram",
+        ) && Boolean(lastUserMessage?.content);
+
+      const parsingText = shouldCombineLoanFollowUp
+        ? `${lastUserMessage?.content ?? ""} ${text}`
+        : text;
+
+      let assistant = tryParseDebtReceived(
+        parsingText,
+        context,
+      );
+
+      if (!assistant) {
+        const controller = new AbortController();
+        const timeoutId = window.setTimeout(
+          () => controller.abort(),
+          35000,
         );
-      }
 
-      const assistant = body as AssistantApiResponse;
+        try {
+          const response = await fetch("/api/assistant/chat", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${await accessToken()}`,
+            },
+            body: JSON.stringify({
+              message: text,
+              householdId: household.id,
+              history,
+              context,
+            }),
+            signal: controller.signal,
+          });
+
+          const body = (await response.json()) as
+            | AssistantApiResponse
+            | { error?: string };
+
+          if (!response.ok) {
+            throw new Error(
+              "error" in body
+                ? body.error || "A IA não conseguiu responder."
+                : "A IA não conseguiu responder.",
+            );
+          }
+
+          assistant = body as AssistantApiResponse;
+        } catch (requestError) {
+          if (
+            requestError instanceof DOMException &&
+            requestError.name === "AbortError"
+          ) {
+            throw new Error(
+              "A resposta da IA demorou mais de 35 segundos. Tente novamente ou use uma frase mais direta.",
+            );
+          }
+
+          throw requestError;
+        } finally {
+          window.clearTimeout(timeoutId);
+        }
+      }
       const hasAction = assistant.action_type !== "none";
 
       const saveAssistant = await supabase

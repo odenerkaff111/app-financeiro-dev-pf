@@ -1,5 +1,10 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import {
+  assertAiUsageAllowed,
+  getAiRuntimeSettings,
+  recordAiUsage,
+} from "@/lib/ai-server";
 
 type RequestHistoryItem = {
   role: "user" | "assistant";
@@ -790,9 +795,20 @@ export async function POST(
       );
     }
 
+    const aiSettings =
+      await getAiRuntimeSettings(
+        supabase,
+        householdId,
+      );
+
+    await assertAiUsageAllowed(
+      supabase,
+      householdId,
+      aiSettings,
+    );
+
     const model =
-      process.env.OPENROUTER_MODEL?.trim() ||
-      "openrouter/free";
+      aiSettings.model;
 
     const history =
       (body.history ?? [])
@@ -1157,6 +1173,89 @@ ${JSON.stringify(context, null, 2)}
         parsed,
         context,
       );
+
+    const meteredResponse =
+      responseBody as OpenRouterResponse & {
+        id?: string;
+        provider?: string;
+
+        usage?: {
+          prompt_tokens?: number;
+          completion_tokens?: number;
+          total_tokens?: number;
+          cost?: number;
+
+          prompt_tokens_details?: {
+            cached_tokens?: number;
+          };
+
+          completion_tokens_details?: {
+            reasoning_tokens?: number;
+          };
+        };
+      };
+
+    await recordAiUsage(
+      supabase,
+      {
+        householdId,
+        userId:
+          userResult.user.id,
+
+        provider:
+          "openrouter",
+
+        providerName:
+          meteredResponse.provider ??
+          null,
+
+        model:
+          responseBody.model ??
+          model,
+
+        requestKind:
+          "chat",
+
+        status:
+          "success",
+
+        generationId:
+          meteredResponse.id ??
+          null,
+
+        promptTokens:
+          meteredResponse.usage
+            ?.prompt_tokens ??
+          0,
+
+        completionTokens:
+          meteredResponse.usage
+            ?.completion_tokens ??
+          0,
+
+        totalTokens:
+          meteredResponse.usage
+            ?.total_tokens ??
+          0,
+
+        reasoningTokens:
+          meteredResponse.usage
+            ?.completion_tokens_details
+            ?.reasoning_tokens ??
+          0,
+
+        cachedTokens:
+          meteredResponse.usage
+            ?.prompt_tokens_details
+            ?.cached_tokens ??
+          0,
+
+        costUsd:
+          meteredResponse.usage
+            ?.cost ??
+          0,
+      },
+    );
 
     return NextResponse.json({
       ...validated,

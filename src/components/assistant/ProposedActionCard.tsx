@@ -106,7 +106,8 @@ export function ProposedActionCard({
           <Row label="Descrição" value={payload.description} />
         )}
 
-        {actionType === "register_debt_payment" && (
+        {(actionType === "register_debt_payment" ||
+          actionType === "register_debt_received") && (
           <Row
             label="Credor"
             value={

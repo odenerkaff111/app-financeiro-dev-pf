@@ -330,6 +330,45 @@ export async function POST(request: Request) {
         "Pagamento da dívida registrado com sucesso.";
     }
 
+    if (actionType === "register_debt_received") {
+      const debtId = requiredText(payload.debt_id, "Dívida");
+      const accountId = requiredText(
+        payload.account_id,
+        "Conta de recebimento",
+      );
+
+      const result = await supabase.rpc(
+        "pf_register_debt_received",
+        {
+          target_debt_id: debtId,
+          target_account_id: accountId,
+          received_amount: amount,
+          received_date: occurredOn,
+          received_notes:
+            payload.notes ||
+            "Registrado pelo assistente financeiro",
+        },
+      );
+
+      if (result.error) {
+        throw result.error;
+      }
+
+      resultId =
+        typeof result.data === "string"
+          ? result.data
+          : null;
+
+      if (!resultId) {
+        throw new Error(
+          "O empréstimo recebido não retornou a movimentação criada.",
+        );
+      }
+
+      successMessage =
+        "Empréstimo recebido registrado com sucesso.";
+    }
+
     if (!resultId) {
       throw new Error(
         "A ação não retornou o identificador da movimentação.",
