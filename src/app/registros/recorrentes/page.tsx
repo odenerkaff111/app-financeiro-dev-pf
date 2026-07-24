@@ -11,7 +11,7 @@ export default function RecorrentesPage() {
         </p>
 
         <h1 className="mt-2 text-3xl font-semibold text-[#0D1B2A] sm:text-4xl">
-          LanÃ§amentos recorrentes
+          Lançamentos recorrentes
         </h1>
 
         <p className="mt-2 max-w-2xl text-sm leading-6 text-[#3A3A3C]/70">

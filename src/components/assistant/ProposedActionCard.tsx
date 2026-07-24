@@ -8,6 +8,7 @@ import {
   Pencil,
   TriangleAlert,
 } from "lucide-react";
+import { useHousehold } from "@/contexts/HouseholdContext";
 import type {
   AssistantContext,
   FinancialActionPayload,
@@ -48,6 +49,8 @@ export function ProposedActionCard({
   onConfirm,
   onCorrect,
 }: Props) {
+  const { canWrite } = useHousehold();
+
   if (actionType === "none") return null;
 
   const account = context.accounts.find(
@@ -164,7 +167,7 @@ export function ProposedActionCard({
         )}
       </div>
 
-      {!confirmed && !cancelled && (
+      {!confirmed && !cancelled && canWrite && (
         <div className="flex flex-col-reverse gap-2 border-t border-[#0D1B2A]/8 px-4 py-3 sm:flex-row sm:justify-end">
           <button
             type="button"
@@ -190,6 +193,14 @@ export function ProposedActionCard({
           </button>
         </div>
       )}
+
+      {!confirmed &&
+        !cancelled &&
+        !canWrite && (
+          <div className="border-t border-[#0D1B2A]/8 px-4 py-3 text-xs leading-5 text-blue-700">
+            Seu acesso é somente leitura. Peça a um administrador para confirmar esta ação.
+          </div>
+        )}
     </article>
   );
 }

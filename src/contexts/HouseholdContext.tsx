@@ -8,12 +8,20 @@ import {
   useMemo,
   useState,
 } from "react";
-import { AlertCircle, Loader2 } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import {
+  AlertCircle,
+  Loader2,
+} from "lucide-react";
+import {
+  supabase,
+} from "@/lib/supabase";
 
-type HouseholdRole = "owner" | "member" | "viewer";
+export type HouseholdRole =
+  | "owner"
+  | "member"
+  | "viewer";
 
-type Household = {
+export type Household = {
   id: string;
   name: string;
   role: HouseholdRole;
@@ -21,7 +29,18 @@ type Household = {
 
 type HouseholdContextValue = {
   household: Household;
-  refreshHousehold: () => Promise<void>;
+
+  canWrite: boolean;
+  isAdmin: boolean;
+  isOwner: boolean;
+  isViewer: boolean;
+
+  roleLabel:
+    | "Administrador"
+    | "Visualizador";
+
+  refreshHousehold:
+    () => Promise<void>;
 };
 
 type EnsureHouseholdRow = {
@@ -31,100 +50,185 @@ type EnsureHouseholdRow = {
 };
 
 const HouseholdContext =
-  createContext<HouseholdContextValue | null>(null);
+  createContext<
+    HouseholdContextValue | null
+  >(null);
 
 export function HouseholdProvider({
   children,
 }: {
-  children: React.ReactNode;
+  children:
+    React.ReactNode;
 }) {
-  const [household, setHousehold] =
-    useState<Household | null>(null);
+  const [
+    household,
+    setHousehold,
+  ] = useState<
+    Household | null
+  >(null);
 
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [
+    loading,
+    setLoading,
+  ] = useState(true);
 
-  const loadHousehold = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const [
+    error,
+    setError,
+  ] = useState<
+    string | null
+  >(null);
 
-    const { data, error: rpcError } = await supabase.rpc(
-      "pf_ensure_household",
-      {
-        default_name: "Nossa família",
-      }
+  const loadHousehold =
+    useCallback(
+      async () => {
+        setLoading(true);
+        setError(null);
+
+        const {
+          data,
+          error:
+            rpcError,
+        } =
+          await supabase.rpc(
+            "pf_ensure_household",
+            {
+              default_name:
+                "Nossa família",
+            },
+          );
+
+        if (rpcError) {
+          throw rpcError;
+        }
+
+        const row =
+          (
+            data as
+              | EnsureHouseholdRow[]
+              | null
+          )?.[0];
+
+        if (!row) {
+          throw new Error(
+            "O Supabase não retornou o grupo familiar.",
+          );
+        }
+
+        setHousehold({
+          id:
+            row.household_id,
+
+          name:
+            row.household_name,
+
+          role:
+            row.member_role,
+        });
+
+        setLoading(false);
+      },
+      [],
     );
 
-    if (rpcError) {
-      throw rpcError;
-    }
-
-    const row =
-      (data as EnsureHouseholdRow[] | null)?.[0];
-
-    if (!row) {
-      throw new Error(
-        "O Supabase não retornou o grupo familiar."
-      );
-    }
-
-    setHousehold({
-      id: row.household_id,
-      name: row.household_name,
-      role: row.member_role,
-    });
-
-    setLoading(false);
-  }, []);
-
   useEffect(() => {
-    let active = true;
+    let active =
+      true;
 
-    void loadHousehold().catch((loadError: unknown) => {
-      if (!active) return;
+    void loadHousehold().catch(
+      (
+        loadError:
+          unknown,
+      ) => {
+        if (!active) {
+          return;
+        }
 
-      const message =
-        loadError instanceof Error
-          ? loadError.message
-          : "Não foi possível preparar os dados da família.";
+        const message =
+          loadError instanceof
+          Error
+            ? loadError.message
+            : "Não foi possível preparar os dados da família.";
 
-      console.error(
-        "Erro ao carregar grupo familiar:",
-        loadError
-      );
+        console.error(
+          "Erro ao carregar grupo familiar:",
+          loadError,
+        );
 
-      setError(message);
-      setLoading(false);
-    });
+        setError(
+          message,
+        );
+
+        setLoading(false);
+      },
+    );
 
     return () => {
-      active = false;
+      active =
+        false;
     };
   }, [loadHousehold]);
 
-  const value = useMemo<HouseholdContextValue | null>(() => {
-    if (!household) return null;
+  const value =
+    useMemo<
+      HouseholdContextValue | null
+    >(() => {
+      if (!household) {
+        return null;
+      }
 
-    return {
+      const isOwner =
+        household.role ===
+        "owner";
+
+      const isAdmin =
+        household.role ===
+          "owner" ||
+        household.role ===
+          "member";
+
+      const isViewer =
+        household.role ===
+        "viewer";
+
+      return {
+        household,
+        canWrite:
+          isAdmin,
+        isAdmin,
+        isOwner,
+        isViewer,
+
+        roleLabel:
+          isViewer
+            ? "Visualizador"
+            : "Administrador",
+
+        refreshHousehold:
+          loadHousehold,
+      };
+    }, [
       household,
-      refreshHousehold: loadHousehold,
-    };
-  }, [household, loadHousehold]);
+      loadHousehold,
+    ]);
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-white text-gray-900">
-        <div className="flex items-center gap-3 text-sm text-gray-600">
-          <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
+      <div className="flex min-h-screen items-center justify-center bg-[#F7F5EF] text-[#0D1B2A]">
+        <div className="flex items-center gap-3 text-sm text-[#3A3A3C]/65">
+          <Loader2 className="h-5 w-5 animate-spin text-[#C8A15A]" />
           Preparando seu espaço financeiro...
         </div>
       </div>
     );
   }
 
-  if (error || !value) {
+  if (
+    error ||
+    !value
+  ) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-white px-6 text-gray-900">
+      <div className="flex min-h-screen items-center justify-center bg-[#F7F5EF] px-6 text-[#0D1B2A]">
         <div className="w-full max-w-lg rounded-2xl border border-red-200 bg-red-50 p-6">
           <div className="flex items-start gap-3">
             <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-600" />
@@ -135,13 +239,16 @@ export function HouseholdProvider({
               </h1>
 
               <p className="mt-2 text-sm text-red-700">
-                {error ?? "Grupo familiar não encontrado."}
+                {error ??
+                  "Grupo familiar não encontrado."}
               </p>
 
               <button
                 type="button"
-                onClick={() => void loadHousehold()}
-                className="mt-4 rounded-lg bg-red-700 px-4 py-2 text-sm font-medium text-white hover:bg-red-800"
+                onClick={() =>
+                  void loadHousehold()
+                }
+                className="mt-4 rounded-xl bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800"
               >
                 Tentar novamente
               </button>
@@ -153,18 +260,23 @@ export function HouseholdProvider({
   }
 
   return (
-    <HouseholdContext.Provider value={value}>
+    <HouseholdContext.Provider
+      value={value}
+    >
       {children}
     </HouseholdContext.Provider>
   );
 }
 
 export function useHousehold() {
-  const context = useContext(HouseholdContext);
+  const context =
+    useContext(
+      HouseholdContext,
+    );
 
   if (!context) {
     throw new Error(
-      "useHousehold deve ser usado dentro de HouseholdProvider."
+      "useHousehold deve ser usado dentro de HouseholdProvider.",
     );
   }
 

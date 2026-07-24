@@ -1,131 +1,216 @@
 "use client";
 
-import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
-import { getSessionOnce, supabase } from "@/lib/supabase";
-import { HouseholdProvider } from "@/contexts/HouseholdContext";
-import { AppDock } from "./AppDock";
-import { AssistantLauncher } from "./assistant/AssistantLauncher";
+import {
+  usePathname,
+  useRouter,
+} from "next/navigation";
+import {
+  useEffect,
+  useState,
+} from "react";
+import {
+  Eye,
+  Loader2,
+} from "lucide-react";
+import {
+  getSessionOnce,
+  supabase,
+} from "@/lib/supabase";
+import {
+  HouseholdProvider,
+  useHousehold,
+} from "@/contexts/HouseholdContext";
+import {
+  AppDock,
+} from "./AppDock";
+import {
+  AssistantLauncher,
+} from "./assistant/AssistantLauncher";
 
 export function AppLayout({
   children,
 }: {
-  children: React.ReactNode;
+  children:
+    React.ReactNode;
 }) {
-  const pathname = usePathname();
-  const router = useRouter();
-  const isAuthPage = pathname?.startsWith("/auth");
+  const pathname =
+    usePathname();
 
-  const [loading, setLoading] = useState(true);
-  const [authenticated, setAuthenticated] = useState(false);
-  const [financialDataVersion, setFinancialDataVersion] =
-    useState(0);
+  const router =
+    useRouter();
+
+  const isAuthPage =
+    pathname?.startsWith(
+      "/auth",
+    );
+
+  const [
+    loading,
+    setLoading,
+  ] = useState(true);
+
+  const [
+    authenticated,
+    setAuthenticated,
+  ] = useState(false);
 
   useEffect(() => {
-    let active = true;
+    let active =
+      true;
 
     async function checkAuth() {
       try {
         const {
-          data: { session },
+          data: {
+            session,
+          },
           error,
-        } = await getSessionOnce();
+        } =
+          await getSessionOnce();
 
-        if (!active) return;
-
-        if (error) {
-          console.error("Erro ao verificar sessão:", error);
-          setAuthenticated(false);
-
-          if (!isAuthPage) {
-            router.replace("/auth");
-          }
-
-          setLoading(false);
+        if (!active) {
           return;
         }
 
-        const hasSession = Boolean(session);
-        setAuthenticated(hasSession);
+        if (error) {
+          console.error(
+            "Erro ao verificar sessão:",
+            error,
+          );
 
-        if (!hasSession && !isAuthPage) {
-          router.replace("/auth");
-        } else if (hasSession && isAuthPage) {
-          router.replace("/");
+          setAuthenticated(
+            false,
+          );
+
+          if (
+            !isAuthPage
+          ) {
+            router.replace(
+              "/auth",
+            );
+          }
+
+          setLoading(
+            false,
+          );
+
+          return;
         }
 
-        setLoading(false);
+        const hasSession =
+          Boolean(
+            session,
+          );
+
+        setAuthenticated(
+          hasSession,
+        );
+
+        if (
+          !hasSession &&
+          !isAuthPage
+        ) {
+          router.replace(
+            "/auth",
+          );
+        } else if (
+          hasSession &&
+          isAuthPage &&
+          pathname ===
+            "/auth"
+        ) {
+          router.replace(
+            "/",
+          );
+        }
+
+        setLoading(
+          false,
+        );
       } catch (error) {
-        if (!active) return;
+        if (!active) {
+          return;
+        }
 
         console.error(
           "Não foi possível conectar ao Supabase:",
           error,
         );
 
-        setAuthenticated(false);
+        setAuthenticated(
+          false,
+        );
 
-        if (!isAuthPage) {
-          router.replace("/auth");
+        if (
+          !isAuthPage
+        ) {
+          router.replace(
+            "/auth",
+          );
         }
 
-        setLoading(false);
+        setLoading(
+          false,
+        );
       }
     }
 
     void checkAuth();
 
     const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!active) return;
+      data: {
+        subscription,
+      },
+    } =
+      supabase.auth.onAuthStateChange(
+        (
+          _event,
+          session,
+        ) => {
+          if (!active) {
+            return;
+          }
 
-      const hasSession = Boolean(session);
-      setAuthenticated(hasSession);
+          const hasSession =
+            Boolean(
+              session,
+            );
 
-      if (!hasSession && !isAuthPage) {
-        router.replace("/auth");
-      } else if (hasSession && isAuthPage) {
-        router.replace("/");
-      }
-    });
+          setAuthenticated(
+            hasSession,
+          );
+
+          if (
+            !hasSession &&
+            !isAuthPage
+          ) {
+            router.replace(
+              "/auth",
+            );
+          } else if (
+            hasSession &&
+            isAuthPage &&
+            pathname ===
+              "/auth"
+          ) {
+            router.replace(
+              "/",
+            );
+          }
+        },
+      );
 
     return () => {
-      active = false;
+      active =
+        false;
+
       subscription.unsubscribe();
     };
-  }, [isAuthPage, router]);
-
-  useEffect(() => {
-    function refreshFinancialData() {
-      setFinancialDataVersion(
-        (currentVersion) => currentVersion + 1,
-      );
-    }
-
-    function handleStorage(event: StorageEvent) {
-      if (event.key === "pf:financial-data-version") {
-        refreshFinancialData();
-      }
-    }
-
-    window.addEventListener(
-      "pf:financial-data-changed",
-      refreshFinancialData,
-    );
-
-    window.addEventListener("storage", handleStorage);
-
-    return () => {
-      window.removeEventListener(
-        "pf:financial-data-changed",
-        refreshFinancialData,
-      );
-
-      window.removeEventListener("storage", handleStorage);
-    };
-  }, []);
+  }, [
+    isAuthPage,
+    pathname,
+    router,
+  ]);
 
   if (loading) {
     return (
@@ -136,30 +221,122 @@ export function AppLayout({
   }
 
   if (isAuthPage) {
-    return <>{children}</>;
+    return (
+      <>
+        {children}
+      </>
+    );
   }
 
-  if (!authenticated) {
+  if (
+    !authenticated
+  ) {
     return null;
   }
 
   return (
     <HouseholdProvider>
-      <main className="relative min-h-screen overflow-x-hidden bg-[#F7F5EF] text-[#0D1B2A]">
-        <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_12%_10%,rgba(200,161,90,0.08),transparent_27%),radial-gradient(circle_at_92%_90%,rgba(13,27,42,0.05),transparent_30%)]" />
-
-        <section className="relative mx-auto w-full max-w-[1600px] px-4 pb-28 pt-5 sm:px-6 sm:pb-32 sm:pt-7 lg:px-8">
-          <div
-            key={`${pathname}-${financialDataVersion}`}
-            className="page-route-enter min-w-0"
-          >
-            {children}
-          </div>
-        </section>
-
-        <AssistantLauncher />
-        <AppDock />
-      </main>
+      <AuthenticatedShell>
+        {children}
+      </AuthenticatedShell>
     </HouseholdProvider>
+  );
+}
+
+function AuthenticatedShell({
+  children,
+}: {
+  children:
+    React.ReactNode;
+}) {
+  const pathname =
+    usePathname();
+
+  const {
+    isViewer,
+  } =
+    useHousehold();
+
+  const [
+    financialDataVersion,
+    setFinancialDataVersion,
+  ] =
+    useState(0);
+
+  useEffect(() => {
+    function refreshFinancialData() {
+      setFinancialDataVersion(
+        (
+          currentVersion,
+        ) =>
+          currentVersion +
+          1,
+      );
+    }
+
+    function handleStorage(
+      event:
+        StorageEvent,
+    ) {
+      if (
+        event.key ===
+        "pf:financial-data-version"
+      ) {
+        refreshFinancialData();
+      }
+    }
+
+    window.addEventListener(
+      "pf:financial-data-changed",
+      refreshFinancialData,
+    );
+
+    window.addEventListener(
+      "storage",
+      handleStorage,
+    );
+
+    return () => {
+      window.removeEventListener(
+        "pf:financial-data-changed",
+        refreshFinancialData,
+      );
+
+      window.removeEventListener(
+        "storage",
+        handleStorage,
+      );
+    };
+  }, []);
+
+  return (
+    <main className="relative min-h-screen overflow-x-hidden bg-[#F7F5EF] text-[#0D1B2A]">
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_12%_10%,rgba(200,161,90,0.08),transparent_27%),radial-gradient(circle_at_92%_90%,rgba(13,27,42,0.05),transparent_30%)]" />
+
+      <section className="relative mx-auto w-full max-w-[1600px] px-4 pb-28 pt-5 sm:px-6 sm:pb-32 sm:pt-7 lg:px-8">
+        {isViewer && (
+          <div className="mb-4 flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+            <Eye
+              size={17}
+              className="shrink-0"
+            />
+
+            <span>
+              Modo visualização. Você pode consultar os dados e conversar com a IA, mas não pode alterar informações financeiras.
+            </span>
+          </div>
+        )}
+
+        <div
+          key={`${pathname}-${financialDataVersion}`}
+          className="page-route-enter min-w-0"
+        >
+          {children}
+        </div>
+      </section>
+
+      <AssistantLauncher />
+      <AppDock />
+    </main>
   );
 }

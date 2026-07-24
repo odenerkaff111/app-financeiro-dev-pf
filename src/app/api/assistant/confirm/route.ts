@@ -119,6 +119,32 @@ export async function POST(request: Request) {
 
     const message = data as unknown as MessageRow;
 
+    const {
+      data: membership,
+      error: membershipError,
+    } = await supabase
+      .from("pf_household_members")
+      .select("role")
+      .eq("household_id", message.household_id)
+      .eq("user_id", userData.user.id)
+      .maybeSingle();
+
+    if (
+      membershipError ||
+      !membership ||
+      !["owner", "member"].includes(String(membership.role))
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Seu acesso é somente leitura. Você não pode confirmar movimentações.",
+        },
+        {
+          status: 403,
+        },
+      );
+    }
+
     if (message.action_status === "confirmed") {
       return NextResponse.json({
         success: true,

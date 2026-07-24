@@ -19,7 +19,7 @@ export default function RegistrosLayout({
       <div className="flex justify-center">
         <nav
           className="inline-flex rounded-2xl border border-[#0D1B2A]/10 bg-white p-1.5 shadow-sm"
-          aria-label="SeÃ§Ãµes de movimentaÃ§Ãµes"
+          aria-label="Seções de movimentações"
         >
           <Link
             href="/registros"
@@ -30,7 +30,7 @@ export default function RegistrosLayout({
                 : "text-[#3A3A3C]/65 hover:bg-[#F7F5EF] hover:text-[#0D1B2A]",
             ].join(" ")}
           >
-            MovimentaÃ§Ãµes
+            Movimentações
           </Link>
 
           <Link

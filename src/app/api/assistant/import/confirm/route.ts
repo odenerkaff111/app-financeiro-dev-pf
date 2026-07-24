@@ -85,7 +85,7 @@ export async function POST(request: Request) {
       await Promise.all([
         supabase
           .from("pf_household_members")
-          .select("household_id")
+          .select("household_id, role")
           .eq("household_id", householdId)
           .eq("user_id", userData.user.id)
           .maybeSingle(),
@@ -104,6 +104,22 @@ export async function POST(request: Request) {
 
     if (membershipResult.error || !membershipResult.data) {
       throw new Error("Você não possui acesso a este grupo familiar.");
+    }
+
+    if (
+      !["owner", "member"].includes(
+        String(membershipResult.data.role),
+      )
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Seu acesso é somente leitura. Você não pode importar movimentações.",
+        },
+        {
+          status: 403,
+        },
+      );
     }
 
     if (accountResult.error || !accountResult.data) {

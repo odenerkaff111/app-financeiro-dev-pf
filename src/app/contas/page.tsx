@@ -81,19 +81,19 @@ const ACCOUNT_TYPE_OPTIONS: AccountTypeOption[] = [
   {
     value: "checking",
     label: "Conta corrente",
-    description: "Conta bancÃ¡ria usada no dia a dia",
+    description: "Conta bancária usada no dia a dia",
     icon: Landmark,
   },
   {
     value: "savings",
-    label: "PoupanÃ§a",
-    description: "Conta poupanÃ§a ou reserva bancÃ¡ria",
+    label: "Poupança",
+    description: "Conta poupança ou reserva bancária",
     icon: PiggyBank,
   },
   {
     value: "cash",
     label: "Dinheiro",
-    description: "Dinheiro guardado em espÃ©cie",
+    description: "Dinheiro guardado em espécie",
     icon: Banknote,
   },
   {
@@ -104,8 +104,8 @@ const ACCOUNT_TYPE_OPTIONS: AccountTypeOption[] = [
   },
   {
     value: "credit_card",
-    label: "CartÃ£o de crÃ©dito",
-    description: "CartÃ£o, limite e fatura atual",
+    label: "Cartão de crédito",
+    description: "Cartão, limite e fatura atual",
     icon: CreditCard,
   },
   {
@@ -226,7 +226,7 @@ export default function AccountsPage() {
       );
 
       setError(
-        "NÃ£o foi possÃ­vel carregar suas contas.",
+        "Não foi possível carregar suas contas.",
       );
 
       setLoading(false);
@@ -252,12 +252,12 @@ export default function AccountsPage() {
 
       if (sessionError || !session) {
         console.error(
-          "Erro ao obter usuÃ¡rio:",
+          "Erro ao obter usuário:",
           sessionError,
         );
 
         setError(
-          "NÃ£o foi possÃ­vel identificar o usuÃ¡rio logado.",
+          "Não foi possível identificar o usuário logado.",
         );
 
         setLoading(false);
@@ -349,7 +349,7 @@ export default function AccountsPage() {
 
     if (!currentUserId) {
       setError(
-        "O usuÃ¡rio logado ainda nÃ£o foi identificado.",
+        "O usuário logado ainda não foi identificado.",
       );
 
       return;
@@ -368,7 +368,7 @@ export default function AccountsPage() {
     );
 
     if (!Number.isFinite(parsedBalance)) {
-      setError("Informe um saldo vÃ¡lido.");
+      setError("Informe um saldo válido.");
 
       return;
     }
@@ -378,7 +378,7 @@ export default function AccountsPage() {
       !Number.isFinite(parsedCreditLimit)
     ) {
       setError(
-        "Informe um limite vÃ¡lido para o cartÃ£o.",
+        "Informe um limite válido para o cartão.",
       );
 
       return;
@@ -464,7 +464,7 @@ export default function AccountsPage() {
 
       setError(
         result.error.message ||
-          "NÃ£o foi possÃ­vel salvar a conta.",
+          "Não foi possível salvar a conta.",
       );
 
       setSaving(false);
@@ -497,7 +497,7 @@ export default function AccountsPage() {
       );
 
       setError(
-        "NÃ£o foi possÃ­vel alterar o status da conta.",
+        "Não foi possível alterar o status da conta.",
       );
 
       return;
@@ -531,7 +531,7 @@ export default function AccountsPage() {
       );
 
       setError(
-        "NÃ£o foi possÃ­vel excluir a conta. Ela pode possuir movimentaÃ§Ãµes vinculadas.",
+        "Não foi possível excluir a conta. Ela pode possuir movimentações vinculadas.",
       );
 
       return;
@@ -545,16 +545,16 @@ export default function AccountsPage() {
       <section className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#C8A15A]">
-            OrganizaÃ§Ã£o financeira
+            Organização financeira
           </p>
 
           <h1 className="mt-2 text-3xl font-semibold text-[#0D1B2A] sm:text-4xl">
-            Contas e cartÃµes
+            Contas e cartões
           </h1>
 
           <p className="mt-2 max-w-2xl text-sm leading-6 text-[#3A3A3C]/70">
-            Registre onde seu dinheiro estÃ¡,
-            seus cartÃµes e seus investimentos.
+            Registre onde seu dinheiro está,
+            seus cartões e seus investimentos.
           </p>
         </div>
 
@@ -592,7 +592,7 @@ export default function AccountsPage() {
 
           <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#3A3A3C]/65">
             Cadastre sua primeira conta,
-            cartÃ£o, dinheiro ou investimento.
+            cartão, dinheiro ou investimento.
           </p>
 
           <button
@@ -724,7 +724,7 @@ export default function AccountsPage() {
                 <div className="mt-4 flex items-center justify-between border-t border-[#0D1B2A]/8 pt-4">
                   <span className="text-xs text-[#3A3A3C]/55">
                     {account.is_shared
-                      ? "Compartilhada com a famÃ­lia"
+                      ? "Compartilhada com a família"
                       : "Conta pessoal"}
                   </span>
 
@@ -789,7 +789,7 @@ export default function AccountsPage() {
                 <h2 className="mt-2 text-2xl font-semibold text-[#0D1B2A]">
                   {editingAccount
                     ? "Editar conta"
-                    : "Adicionar conta ou cartÃ£o"}
+                    : "Adicionar conta ou cartão"}
                 </h2>
               </div>
 
@@ -830,7 +830,7 @@ export default function AccountsPage() {
 
                 <label className="space-y-2">
                   <span className="text-sm font-medium text-[#0D1B2A]">
-                    InstituiÃ§Ã£o
+                    Instituição
                   </span>
 
                   <input
@@ -975,11 +975,11 @@ export default function AccountsPage() {
                 <label className="flex cursor-pointer items-center justify-between gap-4">
                   <div>
                     <p className="text-sm font-medium text-[#0D1B2A]">
-                      Compartilhar com a famÃ­lia
+                      Compartilhar com a família
                     </p>
 
                     <p className="mt-1 text-xs text-[#3A3A3C]/60">
-                      VocÃª e sua esposa poderÃ£o visualizar esta conta.
+                      Você e sua esposa poderão visualizar esta conta.
                     </p>
                   </div>
 
@@ -1003,7 +1003,7 @@ export default function AccountsPage() {
                     </p>
 
                     <p className="mt-1 text-xs text-[#3A3A3C]/60">
-                      Contas inativas nÃ£o entram nos totais.
+                      Contas inativas não entram nos totais.
                     </p>
                   </div>
 
@@ -1047,7 +1047,7 @@ export default function AccountsPage() {
                   )}
 
                   {editingAccount
-                    ? "Salvar alteraÃ§Ãµes"
+                    ? "Salvar alterações"
                     : "Criar conta"}
                 </button>
               </div>
