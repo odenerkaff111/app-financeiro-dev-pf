@@ -39,6 +39,7 @@ import { useHousehold } from "@/contexts/HouseholdContext";
 import { SpendingCategoryChart } from "@/components/SpendingCategoryChart";
 import { DebtSummarySection } from "@/components/DebtSummarySection";
 import { MonthlyClosingSection } from "@/components/MonthlyClosingSection";
+import { FinancialHealthOverview } from "@/components/FinancialHealthOverview";
 
 type PeriodFilter =
   | "today"
@@ -750,8 +751,7 @@ export default function DashboardPage() {
           })}
         </div>
       </div>
-
-      {error && (
+{error && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
         </div>
@@ -827,6 +827,9 @@ export default function DashboardPage() {
 
         <DebtSummarySection />
       </section>
+
+      <FinancialHealthOverview />
+
 
       <MonthlyClosingSection />
 

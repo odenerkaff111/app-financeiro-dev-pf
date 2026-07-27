@@ -1,16 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import {
   AlertTriangle,
-  ArrowDownCircle,
-  ArrowUpCircle,
   CheckCircle2,
-  CircleDollarSign,
   Clock3,
   Loader2,
   TrendingUp,
-  WalletCards,
 } from "lucide-react";
 import {
   useCallback,
@@ -188,7 +183,6 @@ export function FinancialHealthOverview() {
       creditCardBalance,
       personalDebt,
       otherDebt,
-      totalDebt: personalDebt + otherDebt + creditCardBalance,
       dailyGrowth,
       projectedCharges,
       payable,
@@ -275,7 +269,7 @@ export function FinancialHealthOverview() {
 
   if (loading) {
     return (
-      <section className="mt-6 flex min-h-36 items-center justify-center rounded-2xl border border-[#0D1B2A]/10 bg-white/80">
+      <section className="flex min-h-28 items-center justify-center rounded-2xl border border-[#0D1B2A]/10 bg-white/80">
         <Loader2 className="h-6 w-6 animate-spin text-[#C8A15A]" />
       </section>
     );
@@ -283,160 +277,81 @@ export function FinancialHealthOverview() {
 
   if (error) {
     return (
-      <section className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">
+      <section className="rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">
         Não foi possível carregar a visão financeira consolidada: {error}
       </section>
     );
   }
 
   return (
-    <section className="mt-8 space-y-5">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#C8A15A]">
-            Motor financeiro consolidado
-          </p>
-          <h2 className="mt-2 text-2xl font-semibold text-[#0D1B2A]">
-            Posição, pendências e alertas
-          </h2>
-          <p className="mt-1 text-sm text-[#3A3A3C]/65">
-            Cálculos objetivos do banco. A IA apenas explica esses números.
-          </p>
+    <section className="grid grid-cols-1 items-stretch gap-4 xl:grid-cols-[1.25fr_0.75fr]">
+      <div className="flex h-full flex-col rounded-2xl border border-[#0D1B2A]/10 bg-white p-5 shadow-sm">
+        <div className="flex items-center gap-2">
+          <AlertTriangle size={19} className="text-[#C8A15A]" />
+          <h3 className="font-semibold text-[#0D1B2A]">
+            Alertas objetivos
+          </h3>
         </div>
 
-        <Link
-          href="/registros"
-          className="inline-flex h-10 items-center justify-center rounded-xl border border-[#0D1B2A]/15 bg-white px-4 text-sm font-semibold text-[#0D1B2A] transition hover:bg-[#F7F5EF]"
-        >
-          Novo registro
-        </Link>
+        <div className="mt-4 flex-1 space-y-3">
+          {alerts.map((alert) => (
+            <AlertRow key={alert.id} alert={alert} />
+          ))}
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard
-          icon={WalletCards}
-          label="Disponível agora"
-          value={formatCurrency(snapshot.available)}
-          detail="Contas, poupança, dinheiro e carteiras"
-        />
-        <MetricCard
-          icon={ArrowDownCircle}
-          label="Contas abertas"
-          value={formatCurrency(snapshot.payable)}
-          detail={`${formatCurrency(snapshot.overduePayable)} vencidos`}
-        />
-        <MetricCard
-          icon={ArrowUpCircle}
-          label="A receber"
-          value={formatCurrency(snapshot.receivable)}
-          detail={`${formatCurrency(snapshot.overdueReceivable)} vencidos`}
-        />
-        <MetricCard
-          icon={CircleDollarSign}
-          label="Dívidas atualizadas"
-          value={formatCurrency(snapshot.totalDebt)}
-          detail={`Crescimento de ${formatCurrency(snapshot.dailyGrowth)}/dia`}
-        />
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.25fr_0.75fr]">
-        <div className="rounded-2xl border border-[#0D1B2A]/10 bg-white p-5 shadow-sm">
-          <div className="flex items-center gap-2">
-            <AlertTriangle size={19} className="text-[#C8A15A]" />
-            <h3 className="font-semibold text-[#0D1B2A]">
-              Alertas objetivos
-            </h3>
-          </div>
-
-          <div className="mt-4 space-y-3">
-            {alerts.map((alert) => (
-              <AlertRow key={alert.id} alert={alert} />
-            ))}
-          </div>
+      <div className="flex h-full flex-col rounded-2xl border border-[#0D1B2A]/10 bg-white p-5 shadow-sm">
+        <div className="flex items-center gap-2">
+          <TrendingUp size={19} className="text-[#C8A15A]" />
+          <h3 className="font-semibold text-[#0D1B2A]">
+            Leitura rápida
+          </h3>
         </div>
 
-        <div className="rounded-2xl border border-[#0D1B2A]/10 bg-white p-5 shadow-sm">
-          <div className="flex items-center gap-2">
-            <TrendingUp size={19} className="text-[#C8A15A]" />
-            <h3 className="font-semibold text-[#0D1B2A]">
-              Leitura rápida
-            </h3>
-          </div>
+        <div className="mt-4 space-y-2 text-sm">
+          <SummaryRow
+            label="Dívidas pessoais"
+            value={formatCurrency(snapshot.personalDebt)}
+          />
+          <SummaryRow
+            label="Outras dívidas"
+            value={formatCurrency(snapshot.otherDebt)}
+          />
+          <SummaryRow
+            label="Faturas de cartão"
+            value={formatCurrency(snapshot.creditCardBalance)}
+          />
+          <SummaryRow
+            label="Saldo após pendências"
+            value={formatCurrency(snapshot.projectedCash)}
+            emphasized
+          />
+        </div>
 
-          <div className="mt-4 space-y-3 text-sm">
-            <SummaryRow
-              label="Dívidas pessoais"
-              value={formatCurrency(snapshot.personalDebt)}
-            />
-            <SummaryRow
-              label="Outras dívidas"
-              value={formatCurrency(snapshot.otherDebt)}
-            />
-            <SummaryRow
-              label="Faturas de cartão"
-              value={formatCurrency(snapshot.creditCardBalance)}
-            />
-            <SummaryRow
-              label="Saldo após pendências"
-              value={formatCurrency(snapshot.projectedCash)}
-              emphasized
-            />
-          </div>
-
-          {growingDebts.length > 0 && (
-            <div className="mt-5 border-t border-[#0D1B2A]/8 pt-4">
-              <p className="text-xs font-semibold uppercase tracking-wider text-[#3A3A3C]/50">
-                Maiores crescimentos diários
-              </p>
-              <div className="mt-3 space-y-2">
-                {growingDebts.map((debt) => (
-                  <div
-                    key={debt.id}
-                    className="flex items-center justify-between gap-3 text-sm"
-                  >
-                    <span className="truncate text-[#0D1B2A]">
-                      {debt.creditor}
-                    </span>
-                    <span className="shrink-0 font-semibold text-red-700">
-                      +{formatCurrency(debt.daily_growth)}/dia
-                    </span>
-                  </div>
-                ))}
-              </div>
+        {growingDebts.length > 0 && (
+          <div className="mt-4 border-t border-[#0D1B2A]/8 pt-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-[#3A3A3C]/50">
+              Maiores crescimentos diários
+            </p>
+            <div className="mt-3 space-y-2">
+              {growingDebts.map((debt) => (
+                <div
+                  key={debt.id}
+                  className="flex items-center justify-between gap-3 text-sm"
+                >
+                  <span className="truncate text-[#0D1B2A]">
+                    {debt.creditor}
+                  </span>
+                  <span className="shrink-0 font-semibold text-red-700">
+                    +{formatCurrency(debt.daily_growth)}/dia
+                  </span>
+                </div>
+              ))}
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </section>
-  );
-}
-
-function MetricCard({
-  icon: Icon,
-  label,
-  value,
-  detail,
-}: {
-  icon: typeof WalletCards;
-  label: string;
-  value: string;
-  detail: string;
-}) {
-  return (
-    <article className="rounded-2xl border border-[#0D1B2A]/10 bg-white p-4 shadow-sm">
-      <div className="flex items-center gap-2 text-[#3A3A3C]/55">
-        <Icon size={17} className="text-[#C8A15A]" />
-        <span className="text-xs font-semibold uppercase tracking-wider">
-          {label}
-        </span>
-      </div>
-      <p className="mt-3 text-2xl font-semibold text-[#0D1B2A]">
-        {value}
-      </p>
-      <p className="mt-1 text-xs leading-5 text-[#3A3A3C]/55">
-        {detail}
-      </p>
-    </article>
   );
 }
 

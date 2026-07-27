@@ -1,8 +1,10 @@
-# Correção da Parte 2C2
+# Correção do Dashboard
 
-Esta correção faz duas alterações:
+Esta correção:
 
-1. Corrige o tipo de periodicidade anual de `annual` para `yearly`.
-2. Move a visão de posição, pendências e alertas para o início do Dashboard.
-
-Não execute novamente a migration 015.
+- remove completamente o título "Motor financeiro consolidado";
+- remove "Alertas e leitura financeira" e o texto explicativo;
+- posiciona Alertas objetivos e Leitura rápida depois do Resumo financeiro;
+- mantém o filtro de período no topo;
+- iguala a altura dos dois painéis no desktop;
+- não altera banco de dados nem migrations.
