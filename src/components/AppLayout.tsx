@@ -26,6 +26,7 @@ import {
 import {
   AssistantLauncher,
 } from "./assistant/AssistantLauncher";
+import { FinancialHealthOverview } from "./FinancialHealthOverview";
 
 export function AppLayout({
   children,
@@ -331,6 +332,9 @@ function AuthenticatedShell({
           key={`${pathname}-${financialDataVersion}`}
           className="page-route-enter min-w-0"
         >
+          {pathname === "/" && (
+            <FinancialHealthOverview />
+          )}
           {children}
         </div>
       </section>

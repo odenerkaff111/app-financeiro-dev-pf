@@ -473,6 +473,9 @@ export function FinancialAssistant({
       const body = (await response.json()) as {
         success?: boolean;
         resultId?: string | null;
+        resultKind?: "transaction" | "commitment" | "debt";
+        transactionId?: string | null;
+        record?: Record<string, unknown> | null;
         message?: string;
         error?: string;
       };
@@ -481,23 +484,9 @@ export function FinancialAssistant({
         throw new Error(body.error || "Não foi possível confirmar.");
       }
 
-      if (!body.resultId) {
+      if (!body.resultId || !body.record) {
         throw new Error(
-          "A ação foi processada, mas a movimentação não retornou um identificador.",
-        );
-      }
-
-      const verification = await supabase
-        .from("pf_transactions")
-        .select("id, household_id, type, status, amount, occurred_on, source")
-        .eq("id", body.resultId)
-        .eq("household_id", household.id)
-        .maybeSingle();
-
-      if (verification.error || !verification.data) {
-        throw new Error(
-          verification.error?.message ||
-            "A movimentação não foi encontrada após a confirmação.",
+          "A ação foi processada, mas o registro não pôde ser confirmado.",
         );
       }
 
@@ -514,12 +503,14 @@ export function FinancialAssistant({
       );
 
       notifyFinancialDataChanged({
-        transactionId: body.resultId,
+        resultId: body.resultId,
+        resultKind: body.resultKind ?? "transaction",
+        transactionId: body.transactionId ?? null,
         source: "assistant",
       });
 
       const confirmationText =
-        body.message || "Pronto. Registrei a movimentação.";
+        body.message || "Pronto. Registrei a informação financeira.";
 
       const saveConfirmation = await supabase
         .from("pf_ai_messages")

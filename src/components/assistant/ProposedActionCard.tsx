@@ -32,11 +32,17 @@ type Props = {
 };
 
 function formatDate(value: string | null) {
-  if (!value) return "Hoje";
+  if (!value) return "Não informado";
   const [year, month, day] = value.split("-");
   return year && month && day
     ? `${day}/${month}/${year}`
     : value;
+}
+
+function periodLabel(value: FinancialActionPayload["interest_period"]) {
+  if (value === "daily") return "ao dia";
+  if (value === "yearly") return "ao ano";
+  return "ao mês";
 }
 
 export function ProposedActionCard({
@@ -69,6 +75,11 @@ export function ProposedActionCard({
   const confirmed = actionStatus === "confirmed";
   const failed = actionStatus === "failed";
   const cancelled = actionStatus === "cancelled";
+  const party =
+    payload.counterparty ??
+    debt?.creditor ??
+    payload.creditor ??
+    null;
 
   return (
     <article className="mt-3 overflow-hidden rounded-2xl border border-[#C8A15A]/30 bg-white shadow-sm">
@@ -99,7 +110,12 @@ export function ProposedActionCard({
       <div className="space-y-3 px-4 py-4">
         {payload.amount !== null && (
           <Row
-            label="Valor"
+            label={
+              actionType === "create_commitment" ||
+              actionType === "create_other_debt"
+                ? "Valor total"
+                : "Valor"
+            }
             value={formatCurrency(payload.amount)}
             strong
           />
@@ -109,14 +125,26 @@ export function ProposedActionCard({
           <Row label="Descrição" value={payload.description} />
         )}
 
-        {(actionType === "register_debt_payment" ||
-          actionType === "register_debt_received") && (
+        {party && (
           <Row
-            label="Credor"
+            label={
+              actionType === "create_other_debt" ||
+              actionType === "register_debt_payment" ||
+              actionType === "register_debt_received"
+                ? "Credor"
+                : "Pessoa ou empresa"
+            }
+            value={party}
+          />
+        )}
+
+        {payload.commitment_direction && (
+          <Row
+            label="Natureza"
             value={
-              debt?.creditor ??
-              payload.creditor ??
-              "Não identificado"
+              payload.commitment_direction === "receivable"
+                ? "Valor a receber"
+                : "Conta a pagar"
             }
           />
         )}
@@ -135,7 +163,11 @@ export function ProposedActionCard({
         {actionType !== "create_transfer" &&
           payload.account_id && (
             <Row
-              label="Conta"
+              label={
+                payload.commitment_direction === "receivable"
+                  ? "Conta que recebe"
+                  : "Conta"
+              }
               value={
                 account?.name ??
                 payload.account_name ??
@@ -156,6 +188,18 @@ export function ProposedActionCard({
                 "Destino"}
             </span>
           </div>
+        )}
+
+        {actionType === "create_other_debt" &&
+          payload.interest_enabled && (
+            <Row
+              label="Juros"
+              value={`${Number(payload.interest_rate ?? 0).toLocaleString("pt-BR")}% ${periodLabel(payload.interest_period)} · ${payload.interest_method === "compound" ? "compostos" : "simples"}`}
+            />
+          )}
+
+        {payload.due_date && (
+          <Row label="Vencimento" value={formatDate(payload.due_date)} />
         )}
 
         <Row label="Data" value={formatDate(payload.occurred_on)} />
@@ -194,13 +238,11 @@ export function ProposedActionCard({
         </div>
       )}
 
-      {!confirmed &&
-        !cancelled &&
-        !canWrite && (
-          <div className="border-t border-[#0D1B2A]/8 px-4 py-3 text-xs leading-5 text-blue-700">
-            Seu acesso é somente leitura. Peça a um administrador para confirmar esta ação.
-          </div>
-        )}
+      {!confirmed && !cancelled && !canWrite && (
+        <div className="border-t border-[#0D1B2A]/8 px-4 py-3 text-xs leading-5 text-blue-700">
+          Seu acesso é somente leitura. Peça a um administrador para confirmar esta ação.
+        </div>
+      )}
     </article>
   );
 }

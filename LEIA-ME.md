@@ -1,11 +1,8 @@
-# Correção final do aplicador da Parte 2C1
+# Correção da Parte 2C2
 
-Esta versão aceita arquivos com CRLF do Windows e não depende de uma linha exata no bloco de ícones.
+Esta correção faz duas alterações:
 
-Execute:
+1. Corrige o tipo de periodicidade anual de `annual` para `yearly`.
+2. Move a visão de posição, pendências e alertas para o início do Dashboard.
 
-```powershell
-node .\tools\apply-part-2c1.mjs
-```
-
-O arquivo só é gravado depois que todas as alterações essenciais são validadas.
+Não execute novamente a migration 015.
