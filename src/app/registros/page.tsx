@@ -22,6 +22,7 @@ import {
   TrendingUp,
   X,
   type LucideIcon,
+  HandCoins,
 } from "lucide-react";
 import {
   format,
@@ -32,6 +33,7 @@ import {
 import { ptBR } from "date-fns/locale";
 import { supabase, getSessionOnce } from "@/lib/supabase";
 import { useHousehold } from "@/contexts/HouseholdContext";
+import { UnifiedFinancialEntryModal } from "@/components/finance/UnifiedFinancialEntryModal";
 
 type AccountType =
   | "checking"
@@ -291,7 +293,25 @@ function formatDate(value: string | null) {
   }
 }
 
-function getTypeOption(type: TransactionType) {
+function getTypeOption(type: TransactionType | string): TypeOption {
+  if (type === "debt_payment") {
+    return {
+      value: "expense",
+      label: "Pagamento de dívida",
+      shortLabel: "Dívida paga",
+      icon: HandCoins,
+    };
+  }
+
+  if (type === "debt_received") {
+    return {
+      value: "income",
+      label: "Empréstimo recebido",
+      shortLabel: "Empréstimo",
+      icon: HandCoins,
+    };
+  }
+
   return (
     TYPE_OPTIONS.find(
       (option) => option.value === type,
@@ -337,24 +357,24 @@ function getStatusClasses(status: TransactionStatus) {
   return classes[status];
 }
 
-function getAmountClasses(type: TransactionType) {
-  if (type === "income") {
+function getAmountClasses(type: TransactionType | string) {
+  if (type === "income" || type === "debt_received") {
     return "text-emerald-700";
   }
 
-  if (type === "expense") {
+  if (type === "expense" || type === "debt_payment") {
     return "text-red-700";
   }
 
   return "text-[#0D1B2A]";
 }
 
-function getAmountPrefix(type: TransactionType) {
-  if (type === "income") {
+function getAmountPrefix(type: TransactionType | string) {
+  if (type === "income" || type === "debt_received") {
     return "+";
   }
 
-  if (type === "expense") {
+  if (type === "expense" || type === "debt_payment") {
     return "−";
   }
 
@@ -362,7 +382,7 @@ function getAmountPrefix(type: TransactionType) {
 }
 
 export default function TransactionsPage() {
-  const { household } = useHousehold();
+  const { household, canWrite } = useHousehold();
 
   const [transactions, setTransactions] = useState<
     Transaction[]
@@ -392,6 +412,8 @@ export default function TransactionsPage() {
   >(null);
 
   const [modalOpen, setModalOpen] = useState(false);
+
+  const [unifiedModalOpen, setUnifiedModalOpen] = useState(false);
 
   const [selectedTransaction, setSelectedTransaction] =
     useState<Transaction | null>(null);
@@ -784,26 +806,28 @@ export default function TransactionsPage() {
 
 
   function openCreateModal() {
-    const firstAccount =
-      activeAccounts.find(
-        (account) =>
-          account.type !== "investment",
-      ) ?? activeAccounts[0];
+    if (!canWrite) {
+      setPageError("Seu acesso é somente leitura.");
+      return;
+    }
 
-    setSelectedTransaction(null);
-
-    setForm({
-      ...createEmptyForm(),
-      account_id: firstAccount?.id ?? "",
-    });
-
-    setModalError(null);
-    setModalOpen(true);
+    setUnifiedModalOpen(true);
   }
 
   function openEditModal(
     transaction: Transaction,
   ) {
+    if (
+      transaction.debt_id ||
+      ["debt_payment", "debt_received"].includes(String(transaction.type)) ||
+      Boolean(transaction.metadata?.commitment_id)
+    ) {
+      setPageError(
+        "Este registro está ligado a uma dívida ou compromisso e não pode ser alterado isoladamente.",
+      );
+      return;
+    }
+
     setSelectedTransaction(transaction);
 
     setForm({
@@ -1154,22 +1178,19 @@ export default function TransactionsPage() {
           </h1>
 
           <p className="mt-2 max-w-2xl text-sm leading-6 text-[#3A3A3C]/70">
-            Registre receitas, despesas,
-            transferências, aportes e resgates.
+            Esta é a porta única para registrar movimentações, contas, recebíveis e dívidas.
           </p>
         </div>
 
         <button
           type="button"
           onClick={openCreateModal}
-          disabled={
-            activeAccounts.length === 0
-          }
+          disabled={!canWrite}
           className="flex h-11 items-center justify-center gap-2 rounded-xl bg-[#0D1B2A] px-5 text-sm font-semibold text-[#F7F5EF] shadow-lg transition hover:-translate-y-0.5 hover:bg-[#172D43] disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Plus size={18} />
 
-          Nova movimentação
+          Novo registro
         </button>
       </section>
 
@@ -1524,6 +1545,12 @@ export default function TransactionsPage() {
           </div>
         </section>
       )}
+
+      <UnifiedFinancialEntryModal
+        open={unifiedModalOpen}
+        onClose={() => setUnifiedModalOpen(false)}
+        onSaved={loadData}
+      />
 
       {modalOpen && (
         <div className="fixed inset-0 z-[120] overflow-y-auto bg-[#0D1B2A]/55 backdrop-blur-sm">

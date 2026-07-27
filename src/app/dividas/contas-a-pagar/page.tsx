@@ -1,0 +1,7 @@
+"use client";
+
+import { CommitmentsPanel } from "@/components/finance/CommitmentsPanel";
+
+export default function ContasAPagarPage() {
+  return <CommitmentsPanel direction="payable" />;
+}

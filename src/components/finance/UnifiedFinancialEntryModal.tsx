@@ -1,0 +1,1406 @@
+"use client";
+
+import {
+  ArrowRightLeft,
+  BadgeDollarSign,
+  CalendarDays,
+  CircleDollarSign,
+  HandCoins,
+  Loader2,
+  PiggyBank,
+  ReceiptText,
+  TrendingDown,
+  TrendingUp,
+  WalletCards,
+  X,
+} from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+} from "react";
+import { useHousehold } from "@/contexts/HouseholdContext";
+import { supabase } from "@/lib/supabase";
+import {
+  formatCurrency,
+  parsePtBrAmount,
+  toNumber,
+  type CommitmentProgress,
+  type DebtKind,
+  type DebtPosition,
+  type InterestMethod,
+  type InterestPeriod,
+} from "@/lib/financial-engine";
+
+type EntryKind =
+  | "expense"
+  | "income"
+  | "transfer"
+  | "investment_contribution"
+  | "investment_withdrawal"
+  | "payable"
+  | "receivable"
+  | "settle_payable"
+  | "settle_receivable"
+  | "other_debt"
+  | "debt_payment";
+
+type Account = {
+  id: string;
+  name: string;
+  institution_name: string | null;
+  type: string;
+  balance: number | string;
+};
+
+type Category = {
+  id: string;
+  name: string;
+  kind: string;
+};
+
+type FormState = {
+  kind: EntryKind;
+  description: string;
+  counterparty: string;
+  amount: string;
+  totalAmount: string;
+  initialAmount: string;
+  accountId: string;
+  destinationAccountId: string;
+  categoryId: string;
+  date: string;
+  dueDate: string;
+  status: "paid" | "planned";
+  notes: string;
+
+  commitmentId: string;
+  debtId: string;
+
+  debtKind: DebtKind;
+  installmentAmount: string;
+  totalInstallments: string;
+  countInstallment: boolean;
+
+  interestEnabled: boolean;
+  autoAccrueInterest: boolean;
+  interestRate: string;
+  interestPeriod: InterestPeriod;
+  interestMethod: InterestMethod;
+  penaltyRate: string;
+  dailyLateInterestRate: string;
+  gracePeriodDays: string;
+};
+
+type Props = {
+  open: boolean;
+  onClose: () => void;
+  onSaved: () => Promise<void> | void;
+};
+
+const ENTRY_OPTIONS: Array<{
+  value: EntryKind;
+  label: string;
+  group: string;
+}> = [
+  { value: "expense", label: "Despesa", group: "Movimentações" },
+  { value: "income", label: "Receita", group: "Movimentações" },
+  { value: "transfer", label: "Transferência", group: "Movimentações" },
+  {
+    value: "investment_contribution",
+    label: "Aporte em investimento",
+    group: "Movimentações",
+  },
+  {
+    value: "investment_withdrawal",
+    label: "Resgate de investimento",
+    group: "Movimentações",
+  },
+  { value: "payable", label: "Nova conta a pagar", group: "Compromissos" },
+  {
+    value: "receivable",
+    label: "Novo valor a receber",
+    group: "Compromissos",
+  },
+  {
+    value: "settle_payable",
+    label: "Pagar conta existente",
+    group: "Compromissos",
+  },
+  {
+    value: "settle_receivable",
+    label: "Receber valor existente",
+    group: "Compromissos",
+  },
+  { value: "other_debt", label: "Nova dívida", group: "Dívidas" },
+  { value: "debt_payment", label: "Pagar dívida existente", group: "Dívidas" },
+];
+
+function today() {
+  const now = new Date();
+  return [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, "0"),
+    String(now.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+function emptyForm(kind: EntryKind = "expense"): FormState {
+  const currentDate = today();
+
+  return {
+    kind,
+    description: "",
+    counterparty: "",
+    amount: "",
+    totalAmount: "",
+    initialAmount: "",
+    accountId: "",
+    destinationAccountId: "",
+    categoryId: "",
+    date: currentDate,
+    dueDate: currentDate,
+    status: "paid",
+    notes: "",
+    commitmentId: "",
+    debtId: "",
+    debtKind: "bank_loan",
+    installmentAmount: "",
+    totalInstallments: "",
+    countInstallment: false,
+    interestEnabled: false,
+    autoAccrueInterest: false,
+    interestRate: "",
+    interestPeriod: "monthly",
+    interestMethod: "simple",
+    penaltyRate: "",
+    dailyLateInterestRate: "",
+    gracePeriodDays: "0",
+  };
+}
+
+function optionalAmount(value: string) {
+  if (!value.trim()) return 0;
+  return parsePtBrAmount(value);
+}
+
+function optionalNumber(value: string) {
+  if (!value.trim()) return 0;
+  const parsed = Number(value.replace(",", "."));
+  return Number.isFinite(parsed) ? parsed : Number.NaN;
+}
+
+function notifyFinancialChange() {
+  const version = String(Date.now());
+  localStorage.setItem("pf:financial-data-version", version);
+  window.dispatchEvent(new Event("pf:financial-data-changed"));
+}
+
+export function UnifiedFinancialEntryModal({
+  open,
+  onClose,
+  onSaved,
+}: Props) {
+  const { household, canWrite } = useHousehold();
+  const [form, setForm] = useState<FormState>(emptyForm());
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [debts, setDebts] = useState<DebtPosition[]>([]);
+  const [commitments, setCommitments] = useState<CommitmentProgress[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadReferenceData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+
+    const [accountsResult, categoriesResult, debtsResult, commitmentsResult] =
+      await Promise.all([
+        supabase
+          .from("pf_accounts")
+          .select("id, name, institution_name, type, balance")
+          .eq("household_id", household.id)
+          .eq("is_active", true)
+          .order("name"),
+        supabase
+          .from("pf_categories")
+          .select("id, name, kind")
+          .eq("household_id", household.id)
+          .order("name"),
+        supabase
+          .from("pf_debt_positions")
+          .select("*")
+          .eq("household_id", household.id)
+          .neq("status", "cancelled")
+          .gt("projected_balance", 0)
+          .order("projected_balance", { ascending: false }),
+        supabase
+          .from("pf_commitment_progress")
+          .select("*")
+          .eq("household_id", household.id)
+          .in("computed_status", ["pending", "partial", "overdue"])
+          .order("due_date", { ascending: true, nullsFirst: false }),
+      ]);
+
+    const firstError =
+      accountsResult.error ??
+      categoriesResult.error ??
+      debtsResult.error ??
+      commitmentsResult.error;
+
+    if (firstError) {
+      setError(firstError.message);
+      setLoading(false);
+      return;
+    }
+
+    const loadedAccounts = (accountsResult.data ?? []) as Account[];
+    setAccounts(loadedAccounts);
+    setCategories((categoriesResult.data ?? []) as Category[]);
+    setDebts((debtsResult.data ?? []) as DebtPosition[]);
+    setCommitments((commitmentsResult.data ?? []) as CommitmentProgress[]);
+
+    setForm((current) => ({
+      ...current,
+      accountId:
+        current.accountId ||
+        loadedAccounts.find((account) => account.type !== "investment")?.id ||
+        loadedAccounts[0]?.id ||
+        "",
+    }));
+
+    setLoading(false);
+  }, [household.id]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    setForm(emptyForm());
+    void loadReferenceData();
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [open, loadReferenceData]);
+
+  const payableCommitments = useMemo(
+    () => commitments.filter((item) => item.direction === "payable"),
+    [commitments],
+  );
+
+  const receivableCommitments = useMemo(
+    () => commitments.filter((item) => item.direction === "receivable"),
+    [commitments],
+  );
+
+  const selectedCommitment = useMemo(
+    () => commitments.find((item) => item.id === form.commitmentId) ?? null,
+    [commitments, form.commitmentId],
+  );
+
+  const selectedDebt = useMemo(
+    () => debts.find((item) => item.id === form.debtId) ?? null,
+    [debts, form.debtId],
+  );
+
+  const categoryOptions = useMemo(() => {
+    if (form.kind === "income") {
+      return categories.filter((category) => category.kind === "income");
+    }
+
+    if (form.kind === "expense") {
+      return categories.filter((category) => category.kind === "expense");
+    }
+
+    if (
+      form.kind === "investment_contribution" ||
+      form.kind === "investment_withdrawal"
+    ) {
+      return categories.filter((category) => category.kind === "investment");
+    }
+
+    return [];
+  }, [categories, form.kind]);
+
+  const sourceAccounts = useMemo(() => {
+    if (form.kind === "investment_withdrawal") {
+      return accounts.filter((account) => account.type === "investment");
+    }
+
+    if (form.kind === "investment_contribution") {
+      return accounts.filter((account) => account.type !== "investment");
+    }
+
+    if (form.kind === "income") {
+      return accounts.filter((account) => account.type !== "credit_card");
+    }
+
+    return accounts;
+  }, [accounts, form.kind]);
+
+  const destinationAccounts = useMemo(() => {
+    if (form.kind === "investment_contribution") {
+      return accounts.filter(
+        (account) =>
+          account.type === "investment" && account.id !== form.accountId,
+      );
+    }
+
+    if (form.kind === "investment_withdrawal") {
+      return accounts.filter(
+        (account) =>
+          account.type !== "investment" &&
+          account.type !== "credit_card" &&
+          account.id !== form.accountId,
+      );
+    }
+
+    return accounts.filter((account) => account.id !== form.accountId);
+  }, [accounts, form.accountId, form.kind]);
+
+  function update<K extends keyof FormState>(field: K, value: FormState[K]) {
+    setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function changeKind(kind: EntryKind) {
+    const next = emptyForm(kind);
+    const firstAccount =
+      kind === "investment_withdrawal"
+        ? accounts.find((account) => account.type === "investment")
+        : accounts.find((account) => account.type !== "investment") ?? accounts[0];
+
+    next.accountId = firstAccount?.id ?? "";
+    setForm(next);
+    setError(null);
+  }
+
+  async function saveDirectTransaction(userId: string) {
+    const amount = parsePtBrAmount(form.amount);
+    const requiresDestination = [
+      "transfer",
+      "investment_contribution",
+      "investment_withdrawal",
+    ].includes(form.kind);
+
+    if (!form.description.trim()) throw new Error("Informe a descrição.");
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new Error("Informe um valor maior que zero.");
+    }
+    if (!form.accountId) throw new Error("Selecione uma conta.");
+    if (requiresDestination && !form.destinationAccountId) {
+      throw new Error("Selecione a conta de destino.");
+    }
+    if (requiresDestination && form.accountId === form.destinationAccountId) {
+      throw new Error("Origem e destino precisam ser diferentes.");
+    }
+    if (["income", "expense"].includes(form.kind) && !form.categoryId) {
+      throw new Error("Selecione uma categoria.");
+    }
+
+    const paidAt =
+      form.status === "paid"
+        ? new Date(`${form.date}T12:00:00-03:00`).toISOString()
+        : null;
+
+    const result = await supabase.from("pf_transactions").insert({
+      household_id: household.id,
+      account_id: form.accountId,
+      destination_account_id: requiresDestination
+        ? form.destinationAccountId
+        : null,
+      category_id: form.categoryId || null,
+      created_by: userId,
+      responsible_user_id: userId,
+      type: form.kind,
+      status: form.status,
+      description: form.description.trim(),
+      merchant: form.counterparty.trim() || null,
+      amount,
+      original_amount: amount,
+      occurred_on: form.date,
+      due_date: form.dueDate || form.date,
+      paid_at: paidAt,
+      source: "manual",
+      notes: form.notes.trim() || null,
+      metadata: { origin: "unified_entry" },
+    });
+
+    if (result.error) throw result.error;
+  }
+
+  async function saveCommitment(direction: "payable" | "receivable") {
+    const totalAmount = parsePtBrAmount(form.totalAmount);
+    const initialAmount = optionalAmount(form.initialAmount);
+
+    if (!form.counterparty.trim()) throw new Error("Informe a pessoa ou empresa.");
+    if (!form.description.trim()) throw new Error("Informe a descrição.");
+    if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
+      throw new Error("Informe um valor total maior que zero.");
+    }
+    if (!Number.isFinite(initialAmount) || initialAmount < 0) {
+      throw new Error("O valor já liquidado é inválido.");
+    }
+    if (initialAmount > totalAmount) {
+      throw new Error("O valor já liquidado não pode superar o total.");
+    }
+    if (initialAmount > 0 && !form.accountId) {
+      throw new Error("Selecione a conta usada no pagamento ou recebimento.");
+    }
+
+    const result = await supabase.rpc(
+      "pf_create_commitment_with_initial_settlement",
+      {
+        target_household_id: household.id,
+        commitment_direction: direction,
+        commitment_counterparty: form.counterparty.trim(),
+        commitment_description: form.description.trim(),
+        commitment_total_amount: totalAmount,
+        commitment_due_date: form.dueDate || null,
+        commitment_category_id: null,
+        commitment_default_account_id: form.accountId || null,
+        commitment_responsible_user_id: null,
+        commitment_visibility_scope: "family",
+        commitment_notes: form.notes.trim() || null,
+        commitment_source: "manual",
+        initial_settlement_amount: initialAmount,
+        initial_settlement_account_id: initialAmount > 0 ? form.accountId : null,
+        initial_settlement_date: form.date,
+        initial_settlement_notes: form.notes.trim() || null,
+      },
+    );
+
+    if (result.error) throw result.error;
+  }
+
+  async function settleCommitment(direction: "payable" | "receivable") {
+    const amount = parsePtBrAmount(form.amount);
+    const item = selectedCommitment;
+
+    if (!item || item.direction !== direction) {
+      throw new Error("Selecione o compromisso correto.");
+    }
+    if (!form.accountId) throw new Error("Selecione uma conta.");
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new Error("Informe um valor maior que zero.");
+    }
+    if (amount > toNumber(item.remaining_amount) + 0.005) {
+      throw new Error("O valor não pode superar o saldo restante.");
+    }
+
+    const result = await supabase.rpc("pf_register_commitment_settlement", {
+      target_commitment_id: item.id,
+      target_account_id: form.accountId,
+      settlement_amount: amount,
+      settlement_date: form.date,
+      settlement_notes: form.notes.trim() || null,
+      settlement_source: "manual",
+    });
+
+    if (result.error) throw result.error;
+  }
+
+  async function saveOtherDebt() {
+    const totalAmount = parsePtBrAmount(form.totalAmount);
+    const initialAmount = optionalAmount(form.initialAmount);
+    const installmentAmount = optionalAmount(form.installmentAmount);
+    const interestRate = optionalNumber(form.interestRate);
+    const penaltyRate = optionalNumber(form.penaltyRate);
+    const lateRate = optionalNumber(form.dailyLateInterestRate);
+
+    if (!form.counterparty.trim()) throw new Error("Informe o credor.");
+    if (!form.description.trim()) throw new Error("Informe a descrição.");
+    if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
+      throw new Error("Informe um valor original maior que zero.");
+    }
+    if (!Number.isFinite(initialAmount) || initialAmount < 0) {
+      throw new Error("O pagamento inicial é inválido.");
+    }
+    if (initialAmount > totalAmount) {
+      throw new Error("O pagamento inicial não pode superar o valor original.");
+    }
+    if (initialAmount > 0 && !form.accountId) {
+      throw new Error("Selecione a conta do pagamento inicial.");
+    }
+    if (
+      [installmentAmount, interestRate, penaltyRate, lateRate].some(
+        (value) => !Number.isFinite(value) || value < 0,
+      )
+    ) {
+      throw new Error("Revise os valores e as taxas informadas.");
+    }
+
+    const result = await supabase.rpc(
+      "pf_create_other_debt_with_initial_payment",
+      {
+        target_household_id: household.id,
+        debt_creditor: form.counterparty.trim(),
+        debt_description: form.description.trim(),
+        debt_original_amount: totalAmount,
+        debt_kind: form.debtKind,
+        debt_start_date: form.date,
+        debt_due_date: form.dueDate || null,
+        debt_installment_amount: installmentAmount > 0 ? installmentAmount : null,
+        debt_total_installments:
+          Number(form.totalInstallments) > 0
+            ? Number(form.totalInstallments)
+            : null,
+        debt_interest_enabled: form.interestEnabled,
+        debt_auto_accrue_interest:
+          form.interestEnabled && form.autoAccrueInterest,
+        debt_interest_rate: form.interestEnabled ? interestRate : 0,
+        debt_interest_period: form.interestPeriod,
+        debt_interest_method: form.interestMethod,
+        debt_penalty_rate: penaltyRate,
+        debt_daily_late_interest_rate: lateRate,
+        debt_grace_period_days: Number(form.gracePeriodDays || 0),
+        debt_responsible_user_id: null,
+        debt_visibility_scope: "family",
+        initial_payment_amount: initialAmount,
+        initial_payment_account_id: initialAmount > 0 ? form.accountId : null,
+        initial_payment_date: form.date,
+        initial_payment_count_installment: form.countInstallment,
+        initial_payment_notes: form.notes.trim() || null,
+      },
+    );
+
+    if (result.error) throw result.error;
+  }
+
+  async function payDebt() {
+    const amount = parsePtBrAmount(form.amount);
+
+    if (!selectedDebt) throw new Error("Selecione uma dívida.");
+    if (!form.accountId) throw new Error("Selecione a conta do pagamento.");
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new Error("Informe um valor maior que zero.");
+    }
+    if (amount > toNumber(selectedDebt.projected_balance) + 0.005) {
+      throw new Error("O pagamento não pode superar o saldo atualizado.");
+    }
+
+    const result = await supabase.rpc("pf_register_debt_payment", {
+      target_debt_id: selectedDebt.id,
+      target_account_id: form.accountId,
+      payment_amount: amount,
+      payment_date: form.date,
+      count_installment: form.countInstallment,
+      payment_notes: form.notes.trim() || null,
+    });
+
+    if (result.error) throw result.error;
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!canWrite) {
+      setError("Seu acesso é somente leitura.");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+
+    try {
+      const { data, error: userError } = await supabase.auth.getUser();
+      if (userError || !data.user) throw new Error("Sua sessão expirou.");
+
+      if (
+        [
+          "expense",
+          "income",
+          "transfer",
+          "investment_contribution",
+          "investment_withdrawal",
+        ].includes(form.kind)
+      ) {
+        await saveDirectTransaction(data.user.id);
+      } else if (form.kind === "payable") {
+        await saveCommitment("payable");
+      } else if (form.kind === "receivable") {
+        await saveCommitment("receivable");
+      } else if (form.kind === "settle_payable") {
+        await settleCommitment("payable");
+      } else if (form.kind === "settle_receivable") {
+        await settleCommitment("receivable");
+      } else if (form.kind === "other_debt") {
+        await saveOtherDebt();
+      } else if (form.kind === "debt_payment") {
+        await payDebt();
+      }
+
+      notifyFinancialChange();
+      await onSaved();
+      onClose();
+    } catch (saveError) {
+      setError(
+        saveError instanceof Error
+          ? saveError.message
+          : "Não foi possível salvar o registro.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!open) return null;
+
+  const isDirect = [
+    "expense",
+    "income",
+    "transfer",
+    "investment_contribution",
+    "investment_withdrawal",
+  ].includes(form.kind);
+
+  const isNewCommitment = ["payable", "receivable"].includes(form.kind);
+  const isSettlement = ["settle_payable", "settle_receivable"].includes(
+    form.kind,
+  );
+  const requiresDestination = [
+    "transfer",
+    "investment_contribution",
+    "investment_withdrawal",
+  ].includes(form.kind);
+  const selectedSettlementOptions =
+    form.kind === "settle_payable" ? payableCommitments : receivableCommitments;
+
+  return (
+    <div className="fixed inset-0 z-[180] overflow-y-auto bg-[#0D1B2A]/60 p-4 backdrop-blur-sm sm:p-6">
+      <div className="mx-auto flex min-h-full max-w-4xl items-start justify-center">
+        <div className="flex max-h-[calc(100dvh-2rem)] w-full flex-col overflow-hidden rounded-3xl border border-[#C8A15A]/25 bg-[#F7F5EF] shadow-2xl sm:max-h-[calc(100dvh-3rem)]">
+          <header className="flex shrink-0 items-start justify-between gap-4 border-b border-[#0D1B2A]/10 px-6 py-5 sm:px-8">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#C8A15A]">
+                Porta única de cadastro
+              </p>
+              <h2 className="mt-2 text-2xl font-semibold text-[#0D1B2A]">
+                Novo registro financeiro
+              </h2>
+              <p className="mt-1 text-sm text-[#3A3A3C]/60">
+                Registre uma vez. O sistema atualiza saldos, dívidas e pendências.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={saving}
+              className="rounded-full p-2 text-[#3A3A3C]/55 hover:bg-white"
+              aria-label="Fechar"
+            >
+              <X size={20} />
+            </button>
+          </header>
+
+          <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
+            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-5 sm:px-8 sm:py-6">
+              <label className="block space-y-2">
+                <span className="text-sm font-medium text-[#0D1B2A]">
+                  O que você quer registrar?
+                </span>
+                <select
+                  value={form.kind}
+                  onChange={(event) => changeKind(event.target.value as EntryKind)}
+                  className="h-12 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-4 text-sm outline-none focus:border-[#C8A15A]"
+                >
+                  {["Movimentações", "Compromissos", "Dívidas"].map((group) => (
+                    <optgroup key={group} label={group}>
+                      {ENTRY_OPTIONS.filter((option) => option.group === group).map(
+                        (option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ),
+                      )}
+                    </optgroup>
+                  ))}
+                </select>
+              </label>
+
+              {loading ? (
+                <div className="flex min-h-56 items-center justify-center">
+                  <Loader2 className="h-7 w-7 animate-spin text-[#C8A15A]" />
+                </div>
+              ) : (
+                <>
+                  {isDirect && (
+                    <>
+                      <SectionTitle
+                        icon={
+                          form.kind === "expense"
+                            ? TrendingDown
+                            : form.kind === "income"
+                              ? TrendingUp
+                              : form.kind === "transfer"
+                                ? ArrowRightLeft
+                                : PiggyBank
+                        }
+                        title="Movimentação"
+                      />
+
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <TextField
+                          label="Descrição"
+                          value={form.description}
+                          onChange={(value) => update("description", value)}
+                          placeholder="Ex.: supermercado, salário ou transferência"
+                          required
+                        />
+                        <TextField
+                          label="Pessoa ou estabelecimento"
+                          value={form.counterparty}
+                          onChange={(value) => update("counterparty", value)}
+                          placeholder="Opcional"
+                        />
+                        <MoneyField
+                          label="Valor"
+                          value={form.amount}
+                          onChange={(value) => update("amount", value)}
+                          required
+                        />
+                        <SelectField
+                          label="Status"
+                          value={form.status}
+                          onChange={(value) =>
+                            update("status", value as "paid" | "planned")
+                          }
+                          options={[
+                            { value: "paid", label: "Realizado" },
+                            { value: "planned", label: "Planejado" },
+                          ]}
+                        />
+                        <AccountSelect
+                          label={
+                            form.kind === "income"
+                              ? "Conta que recebeu"
+                              : form.kind === "investment_withdrawal"
+                                ? "Investimento de origem"
+                                : "Conta de origem ou pagamento"
+                          }
+                          value={form.accountId}
+                          onChange={(value) => {
+                            update("accountId", value);
+                            if (form.destinationAccountId === value) {
+                              update("destinationAccountId", "");
+                            }
+                          }}
+                          accounts={sourceAccounts}
+                        />
+                        {requiresDestination && (
+                          <AccountSelect
+                            label={
+                              form.kind === "investment_contribution"
+                                ? "Investimento de destino"
+                                : "Conta de destino"
+                            }
+                            value={form.destinationAccountId}
+                            onChange={(value) => update("destinationAccountId", value)}
+                            accounts={destinationAccounts}
+                          />
+                        )}
+                        {form.kind !== "transfer" && (
+                          <SelectField
+                            label="Categoria"
+                            value={form.categoryId}
+                            onChange={(value) => update("categoryId", value)}
+                            options={categoryOptions.map((category) => ({
+                              value: category.id,
+                              label: category.name,
+                            }))}
+                            emptyLabel="Selecione"
+                          />
+                        )}
+                        <DateField
+                          label="Data"
+                          value={form.date}
+                          onChange={(value) => update("date", value)}
+                        />
+                        <DateField
+                          label="Vencimento"
+                          value={form.dueDate}
+                          onChange={(value) => update("dueDate", value)}
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {isNewCommitment && (
+                    <>
+                      <SectionTitle
+                        icon={form.kind === "payable" ? ReceiptText : BadgeDollarSign}
+                        title={
+                          form.kind === "payable"
+                            ? "Nova conta a pagar"
+                            : "Novo valor a receber"
+                        }
+                      />
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <TextField
+                          label={
+                            form.kind === "payable"
+                              ? "Credor ou fornecedor"
+                              : "Quem deve pagar"
+                          }
+                          value={form.counterparty}
+                          onChange={(value) => update("counterparty", value)}
+                          required
+                        />
+                        <TextField
+                          label="Descrição"
+                          value={form.description}
+                          onChange={(value) => update("description", value)}
+                          required
+                        />
+                        <MoneyField
+                          label="Valor total"
+                          value={form.totalAmount}
+                          onChange={(value) => update("totalAmount", value)}
+                          required
+                        />
+                        <MoneyField
+                          label={
+                            form.kind === "payable"
+                              ? "Valor já pago"
+                              : "Valor já recebido"
+                          }
+                          value={form.initialAmount}
+                          onChange={(value) => update("initialAmount", value)}
+                          hint="Deixe vazio quando ainda não houve liquidação."
+                        />
+                        <AccountSelect
+                          label={
+                            form.kind === "payable"
+                              ? "Conta usada ou prevista"
+                              : "Conta de recebimento"
+                          }
+                          value={form.accountId}
+                          onChange={(value) => update("accountId", value)}
+                          accounts={accounts}
+                          optional
+                        />
+                        <DateField
+                          label="Data da liquidação inicial"
+                          value={form.date}
+                          onChange={(value) => update("date", value)}
+                        />
+                        <DateField
+                          label="Vencimento"
+                          value={form.dueDate}
+                          onChange={(value) => update("dueDate", value)}
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {isSettlement && (
+                    <>
+                      <SectionTitle
+                        icon={WalletCards}
+                        title={
+                          form.kind === "settle_payable"
+                            ? "Pagar conta existente"
+                            : "Receber valor existente"
+                        }
+                      />
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <SelectField
+                          label="Compromisso"
+                          value={form.commitmentId}
+                          onChange={(value) => {
+                            update("commitmentId", value);
+                            const item = commitments.find((row) => row.id === value);
+                            update(
+                              "amount",
+                              item
+                                ? toNumber(item.remaining_amount)
+                                    .toFixed(2)
+                                    .replace(".", ",")
+                                : "",
+                            );
+                            if (item?.default_account_id) {
+                              update("accountId", item.default_account_id);
+                            }
+                          }}
+                          options={selectedSettlementOptions.map((item) => ({
+                            value: item.id,
+                            label: `${item.counterparty} — ${item.description} — ${formatCurrency(
+                              item.remaining_amount,
+                            )}`,
+                          }))}
+                          emptyLabel="Selecione"
+                        />
+                        <MoneyField
+                          label={
+                            form.kind === "settle_payable"
+                              ? "Valor pago"
+                              : "Valor recebido"
+                          }
+                          value={form.amount}
+                          onChange={(value) => update("amount", value)}
+                          required
+                        />
+                        <AccountSelect
+                          label={
+                            form.kind === "settle_payable"
+                              ? "Conta que pagou"
+                              : "Conta que recebeu"
+                          }
+                          value={form.accountId}
+                          onChange={(value) => update("accountId", value)}
+                          accounts={accounts}
+                        />
+                        <DateField
+                          label="Data"
+                          value={form.date}
+                          onChange={(value) => update("date", value)}
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {form.kind === "other_debt" && (
+                    <>
+                      <SectionTitle icon={HandCoins} title="Nova dívida" />
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <TextField
+                          label="Credor"
+                          value={form.counterparty}
+                          onChange={(value) => update("counterparty", value)}
+                          required
+                        />
+                        <TextField
+                          label="Descrição"
+                          value={form.description}
+                          onChange={(value) => update("description", value)}
+                          required
+                        />
+                        <SelectField
+                          label="Tipo de dívida"
+                          value={form.debtKind}
+                          onChange={(value) => update("debtKind", value as DebtKind)}
+                          options={[
+                            { value: "bank_loan", label: "Empréstimo bancário" },
+                            { value: "financing", label: "Financiamento" },
+                            { value: "retail", label: "Loja ou crediário" },
+                            { value: "credit_card", label: "Cartão de crédito" },
+                            { value: "tax", label: "Imposto" },
+                            { value: "bill", label: "Conta vencida" },
+                            { value: "other", label: "Outra dívida" },
+                          ]}
+                        />
+                        <MoneyField
+                          label="Valor original"
+                          value={form.totalAmount}
+                          onChange={(value) => update("totalAmount", value)}
+                          required
+                        />
+                        <MoneyField
+                          label="Pagamento inicial"
+                          value={form.initialAmount}
+                          onChange={(value) => update("initialAmount", value)}
+                          hint="Use quando parte da dívida já foi paga agora."
+                        />
+                        <AccountSelect
+                          label="Conta do pagamento inicial"
+                          value={form.accountId}
+                          onChange={(value) => update("accountId", value)}
+                          accounts={accounts}
+                          optional
+                        />
+                        <MoneyField
+                          label="Valor da parcela"
+                          value={form.installmentAmount}
+                          onChange={(value) => update("installmentAmount", value)}
+                        />
+                        <TextField
+                          label="Número de parcelas"
+                          value={form.totalInstallments}
+                          onChange={(value) => update("totalInstallments", value)}
+                          inputMode="numeric"
+                        />
+                        <DateField
+                          label="Data inicial"
+                          value={form.date}
+                          onChange={(value) => update("date", value)}
+                        />
+                        <DateField
+                          label="Vencimento"
+                          value={form.dueDate}
+                          onChange={(value) => update("dueDate", value)}
+                        />
+                      </div>
+
+                      <label className="flex items-center justify-between rounded-xl border border-[#0D1B2A]/10 bg-white p-4">
+                        <div>
+                          <p className="text-sm font-medium text-[#0D1B2A]">
+                            Possui juros recorrentes
+                          </p>
+                          <p className="mt-1 text-xs text-[#3A3A3C]/50">
+                            O saldo projetado evolui automaticamente com o tempo.
+                          </p>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={form.interestEnabled}
+                          onChange={(event) =>
+                            update("interestEnabled", event.target.checked)
+                          }
+                          className="h-5 w-5 accent-[#0D1B2A]"
+                        />
+                      </label>
+
+                      {form.interestEnabled && (
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                          <TextField
+                            label="Taxa de juros (%)"
+                            value={form.interestRate}
+                            onChange={(value) => update("interestRate", value)}
+                            inputMode="decimal"
+                            required
+                          />
+                          <SelectField
+                            label="Periodicidade"
+                            value={form.interestPeriod}
+                            onChange={(value) =>
+                              update("interestPeriod", value as InterestPeriod)
+                            }
+                            options={[
+                              { value: "daily", label: "Ao dia" },
+                              { value: "monthly", label: "Ao mês" },
+                              { value: "yearly", label: "Ao ano" },
+                            ]}
+                          />
+                          <SelectField
+                            label="Método"
+                            value={form.interestMethod}
+                            onChange={(value) =>
+                              update("interestMethod", value as InterestMethod)
+                            }
+                            options={[
+                              { value: "simple", label: "Juros simples" },
+                              { value: "compound", label: "Juros compostos" },
+                            ]}
+                          />
+                          <label className="flex items-center justify-between rounded-xl border border-[#0D1B2A]/10 bg-white p-4">
+                            <span className="text-sm font-medium text-[#0D1B2A]">
+                              Calcular automaticamente
+                            </span>
+                            <input
+                              type="checkbox"
+                              checked={form.autoAccrueInterest}
+                              onChange={(event) =>
+                                update("autoAccrueInterest", event.target.checked)
+                              }
+                              className="h-5 w-5 accent-[#0D1B2A]"
+                            />
+                          </label>
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                        <TextField
+                          label="Multa (%)"
+                          value={form.penaltyRate}
+                          onChange={(value) => update("penaltyRate", value)}
+                          inputMode="decimal"
+                        />
+                        <TextField
+                          label="Juros de atraso ao dia (%)"
+                          value={form.dailyLateInterestRate}
+                          onChange={(value) =>
+                            update("dailyLateInterestRate", value)
+                          }
+                          inputMode="decimal"
+                        />
+                        <TextField
+                          label="Carência em dias"
+                          value={form.gracePeriodDays}
+                          onChange={(value) => update("gracePeriodDays", value)}
+                          inputMode="numeric"
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {form.kind === "debt_payment" && (
+                    <>
+                      <SectionTitle icon={CircleDollarSign} title="Pagar dívida" />
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <SelectField
+                          label="Dívida"
+                          value={form.debtId}
+                          onChange={(value) => {
+                            update("debtId", value);
+                            const debt = debts.find((item) => item.id === value);
+                            update(
+                              "amount",
+                              debt
+                                ? toNumber(debt.projected_balance)
+                                    .toFixed(2)
+                                    .replace(".", ",")
+                                : "",
+                            );
+                          }}
+                          options={debts.map((debt) => ({
+                            value: debt.id,
+                            label: `${debt.creditor} — ${formatCurrency(
+                              debt.projected_balance,
+                            )}`,
+                          }))}
+                          emptyLabel="Selecione"
+                        />
+                        <MoneyField
+                          label="Valor pago"
+                          value={form.amount}
+                          onChange={(value) => update("amount", value)}
+                          required
+                        />
+                        <AccountSelect
+                          label="Conta que pagou"
+                          value={form.accountId}
+                          onChange={(value) => update("accountId", value)}
+                          accounts={accounts}
+                        />
+                        <DateField
+                          label="Data do pagamento"
+                          value={form.date}
+                          onChange={(value) => update("date", value)}
+                        />
+                        {selectedDebt?.total_installments && (
+                          <label className="flex items-center gap-3 rounded-xl border border-[#0D1B2A]/10 bg-white p-4 md:col-span-2">
+                            <input
+                              type="checkbox"
+                              checked={form.countInstallment}
+                              onChange={(event) =>
+                                update("countInstallment", event.target.checked)
+                              }
+                              className="h-5 w-5 accent-[#0D1B2A]"
+                            />
+                            <span className="text-sm text-[#0D1B2A]">
+                              Contar como uma parcela paga
+                            </span>
+                          </label>
+                        )}
+                      </div>
+                    </>
+                  )}
+
+                  <label className="block space-y-2">
+                    <span className="text-sm font-medium text-[#0D1B2A]">
+                      Observações
+                    </span>
+                    <textarea
+                      rows={3}
+                      value={form.notes}
+                      onChange={(event) => update("notes", event.target.value)}
+                      placeholder="Informações adicionais..."
+                      className="w-full resize-none rounded-xl border border-[#0D1B2A]/15 bg-white px-4 py-3 text-sm outline-none focus:border-[#C8A15A]"
+                    />
+                  </label>
+                </>
+              )}
+
+              {error && (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {error}
+                </div>
+              )}
+            </div>
+
+            <footer className="flex shrink-0 flex-col-reverse gap-3 border-t border-[#0D1B2A]/10 px-6 py-4 sm:flex-row sm:justify-end sm:px-8">
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={saving}
+                className="h-11 rounded-xl border border-[#0D1B2A]/15 px-5 text-sm font-semibold text-[#0D1B2A] hover:bg-white disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={saving || loading || !canWrite}
+                className="flex h-11 items-center justify-center gap-2 rounded-xl bg-[#0D1B2A] px-6 text-sm font-semibold text-[#F7F5EF] hover:bg-[#172D43] disabled:opacity-60"
+              >
+                {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+                Salvar registro
+              </button>
+            </footer>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type IconType = typeof CircleDollarSign;
+
+function SectionTitle({ icon: Icon, title }: { icon: IconType; title: string }) {
+  return (
+    <div className="flex items-center gap-3 border-b border-[#0D1B2A]/8 pb-3">
+      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#0D1B2A] text-[#C8A15A]">
+        <Icon size={17} />
+      </div>
+      <h3 className="font-semibold text-[#0D1B2A]">{title}</h3>
+    </div>
+  );
+}
+
+function TextField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  required = false,
+  inputMode,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  required?: boolean;
+  inputMode?: "text" | "numeric" | "decimal";
+}) {
+  return (
+    <label className="block space-y-2">
+      <span className="text-sm font-medium text-[#0D1B2A]">{label}</span>
+      <input
+        type="text"
+        inputMode={inputMode}
+        required={required}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-4 text-sm outline-none focus:border-[#C8A15A]"
+      />
+    </label>
+  );
+}
+
+function MoneyField({
+  label,
+  value,
+  onChange,
+  required = false,
+  hint,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  required?: boolean;
+  hint?: string;
+}) {
+  return (
+    <label className="block space-y-2">
+      <span className="text-sm font-medium text-[#0D1B2A]">{label}</span>
+      <input
+        type="text"
+        inputMode="decimal"
+        required={required}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder="0,00"
+        className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-4 text-sm outline-none focus:border-[#C8A15A]"
+      />
+      {hint && <span className="block text-xs text-[#3A3A3C]/50">{hint}</span>}
+    </label>
+  );
+}
+
+function DateField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="block space-y-2">
+      <span className="text-sm font-medium text-[#0D1B2A]">{label}</span>
+      <div className="relative">
+        <CalendarDays
+          size={16}
+          className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#3A3A3C]/40"
+        />
+        <input
+          type="date"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white pl-10 pr-4 text-sm outline-none focus:border-[#C8A15A]"
+        />
+      </div>
+    </label>
+  );
+}
+
+function SelectField({
+  label,
+  value,
+  onChange,
+  options,
+  emptyLabel,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: Array<{ value: string; label: string }>;
+  emptyLabel?: string;
+}) {
+  return (
+    <label className="block space-y-2">
+      <span className="text-sm font-medium text-[#0D1B2A]">{label}</span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-4 text-sm outline-none focus:border-[#C8A15A]"
+      >
+        {emptyLabel && <option value="">{emptyLabel}</option>}
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function AccountSelect({
+  label,
+  value,
+  onChange,
+  accounts,
+  optional = false,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  accounts: Account[];
+  optional?: boolean;
+}) {
+  return (
+    <label className="block space-y-2">
+      <span className="text-sm font-medium text-[#0D1B2A]">{label}</span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-4 text-sm outline-none focus:border-[#C8A15A]"
+      >
+        <option value="">{optional ? "Opcional" : "Selecione"}</option>
+        {accounts.map((account) => (
+          <option key={account.id} value={account.id}>
+            {account.name} — {formatCurrency(account.balance)}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}

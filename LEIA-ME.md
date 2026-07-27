@@ -1,27 +1,11 @@
-# Correção da Parte 2A
+# Correção final do aplicador da Parte 2C1
 
-## Motivo
+Esta versão aceita arquivos com CRLF do Windows e não depende de uma linha exata no bloco de ícones.
 
-O teste da migration 011 falhava no SQL Editor com:
+Execute:
 
-`Você não possui acesso a esta dívida.`
+```powershell
+node .\tools\apply-part-2c1.mjs
+```
 
-O SQL Editor não possui `auth.uid()` de um usuário do aplicativo. A função
-`pf_calculate_debt_position` era `SECURITY INVOKER`, mas fazia uma segunda
-checagem explícita por `pf_is_member`, impedindo a validação administrativa.
-
-## Segurança preservada
-
-A checagem explícita foi removida da função, mas a proteção permanece porque:
-
-- a função continua `SECURITY INVOKER`;
-- `pf_debts` continua protegida por RLS;
-- `pf_debt_positions` continua `security_invoker = true`;
-- apenas usuários autenticados recebem permissão de execução;
-- usuários sem acesso não conseguem ler a dívida subjacente.
-
-## Ordem
-
-1. Execute `012_fix_debt_position_access.sql`.
-2. Execute `012_financial_engine_smoke.sql`.
-3. Rode `npm run build`.
+O arquivo só é gravado depois que todas as alterações essenciais são validadas.
