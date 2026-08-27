@@ -336,18 +336,63 @@ export function FinancialAssistant({
         .reverse()
         .find((message) => message.role === "assistant");
 
-      const lastUserMessage = [...messages]
-        .reverse()
-        .find((message) => message.role === "user");
+      const previousUserMessages = messages
+        .filter((message) => message.role === "user")
+        .map((message) => message.content);
 
-      const shouldCombineLoanFollowUp =
-        lastAssistantMessage?.content.startsWith(
-          "Em qual conta entraram",
-        ) && Boolean(lastUserMessage?.content);
+      const findLatestAmountText = () => {
+        for (const previousText of [...previousUserMessages].reverse()) {
+          const amountMatch = previousText.match(
+            /(?:r\$\s*)?(\d+(?:\.\d{3})*(?:,\d{1,2})?)(?!\d)/i,
+          );
+          if (amountMatch?.[1]) return amountMatch[1];
+        }
+        return null;
+      };
 
-      const parsingText = shouldCombineLoanFollowUp
-        ? `${lastUserMessage?.content ?? ""} ${text}`
-        : text;
+      const buildDeterministicFollowUpText = () => {
+        const prompt = lastAssistantMessage?.content ?? "";
+
+        const paymentAmountPrompt = prompt.match(
+          /^Qual foi o valor pago para (.+)\?$/i,
+        );
+        if (paymentAmountPrompt?.[1]) {
+          return `paguei ${text} para ${paymentAmountPrompt[1]}`;
+        }
+
+        const paymentAccountPrompt = prompt.match(
+          /^Por qual conta você pagou (.+)\?$/i,
+        );
+        if (paymentAccountPrompt?.[1]) {
+          const latestAmount = findLatestAmountText();
+          return latestAmount
+            ? `paguei ${latestAmount} para ${paymentAccountPrompt[1]} pelo ${text}`
+            : `paguei para ${paymentAccountPrompt[1]} pelo ${text}`;
+        }
+
+        const loanAccountPrompt = prompt.match(
+          /^Em qual conta entraram os (.+) emprestados por (.+)\?$/i,
+        );
+        if (loanAccountPrompt?.[1] && loanAccountPrompt?.[2]) {
+          return `peguei emprestado ${loanAccountPrompt[1]} de ${loanAccountPrompt[2]} na ${text}`;
+        }
+
+        if (prompt.startsWith("Qual foi o valor que você pegou emprestado")) {
+          const lastLoanMessage = [...previousUserMessages]
+            .reverse()
+            .find((previousText) =>
+              /emprest|empr[eé]stimo|d[ií]vida/i.test(previousText),
+            );
+
+          return lastLoanMessage
+            ? `${lastLoanMessage} ${text}`.trim()
+            : text;
+        }
+
+        return text;
+      };
+
+      const parsingText = buildDeterministicFollowUpText();
 
       let assistant = tryParseDebtReceived(
         parsingText,
@@ -818,9 +863,9 @@ export function FinancialAssistant({
                   Pode falar naturalmente
                 </p>
                 <p className="mt-2">
-                  “Paguei R$ 100 para a Vanda pelo Santander.”
+                  “Paguei 100 para a Vanda pelo Santander.”
                 </p>
-                <p>“Gastei R$ 84 no supermercado pelo Nubank.”</p>
+                <p>“Gastei 84 com alimentação pelo Nubank.”</p>
               </div>
             )}
 

@@ -8,12 +8,14 @@ import {
   HandCoins,
   Loader2,
   PiggyBank,
+  Plus,
   ReceiptText,
   TrendingDown,
   TrendingUp,
   WalletCards,
   X,
 } from "lucide-react";
+import { createPortal } from "react-dom";
 import {
   useCallback,
   useEffect,
@@ -28,7 +30,6 @@ import {
   parsePtBrAmount,
   toNumber,
   type CommitmentProgress,
-  type DebtKind,
   type DebtPosition,
   type InterestMethod,
   type InterestPeriod,
@@ -75,11 +76,12 @@ type FormState = {
   dueDate: string;
   status: "paid" | "planned";
   notes: string;
+  isEssential: boolean;
 
   commitmentId: string;
   debtId: string;
 
-  debtKind: DebtKind;
+  debtGroup: "personal" | "other";
   installmentAmount: string;
   totalInstallments: string;
   countInstallment: boolean;
@@ -100,43 +102,47 @@ type Props = {
   onSaved: () => Promise<void> | void;
 };
 
-const ENTRY_OPTIONS: Array<{
+type EntryDirection = "outgoing" | "incoming";
+
+type EntryOption = {
   value: EntryKind;
   label: string;
-  group: string;
-}> = [
-  { value: "expense", label: "Despesa", group: "Movimentações" },
-  { value: "income", label: "Receita", group: "Movimentações" },
-  { value: "transfer", label: "Transferência", group: "Movimentações" },
-  {
-    value: "investment_contribution",
-    label: "Aporte em investimento",
-    group: "Movimentações",
-  },
-  {
-    value: "investment_withdrawal",
-    label: "Resgate de investimento",
-    group: "Movimentações",
-  },
-  { value: "payable", label: "Nova conta a pagar", group: "Compromissos" },
-  {
-    value: "receivable",
-    label: "Novo valor a receber",
-    group: "Compromissos",
-  },
-  {
-    value: "settle_payable",
-    label: "Pagar conta existente",
-    group: "Compromissos",
-  },
-  {
-    value: "settle_receivable",
-    label: "Receber valor existente",
-    group: "Compromissos",
-  },
-  { value: "other_debt", label: "Nova dívida", group: "Dívidas" },
-  { value: "debt_payment", label: "Pagar dívida existente", group: "Dívidas" },
+};
+
+const PRIMARY_OPTIONS: Record<EntryDirection, EntryOption[]> = {
+  outgoing: [
+    { value: "expense", label: "Despesa ou conta" },
+    { value: "debt_payment", label: "Pagamento de dívida" },
+    { value: "investment_contribution", label: "Investimento" },
+  ],
+  incoming: [
+    { value: "income", label: "Receita ou salário" },
+  ],
+};
+
+const SECONDARY_OPTIONS: EntryOption[] = [
+  { value: "transfer", label: "Transferência entre contas" },
+  { value: "investment_withdrawal", label: "Resgate de investimento" },
+  { value: "payable", label: "Criar compromisso a pagar" },
+  { value: "receivable", label: "Criar valor a receber" },
+  { value: "settle_payable", label: "Pagar compromisso existente" },
+  { value: "settle_receivable", label: "Receber compromisso existente" },
+  { value: "other_debt", label: "Cadastrar nova dívida" },
 ];
+
+function directionForKind(kind: EntryKind): EntryDirection {
+  if ([
+    "income",
+    "receivable",
+    "settle_receivable",
+    "investment_withdrawal",
+  ].includes(kind)) {
+    return "incoming";
+  }
+
+  return "outgoing";
+}
+
 
 function today() {
   const now = new Date();
@@ -164,9 +170,10 @@ function emptyForm(kind: EntryKind = "expense"): FormState {
     dueDate: currentDate,
     status: "paid",
     notes: "",
+    isEssential: false,
     commitmentId: "",
     debtId: "",
-    debtKind: "bank_loan",
+    debtGroup: "personal",
     installmentAmount: "",
     totalInstallments: "",
     countInstallment: false,
@@ -212,6 +219,9 @@ export function UnifiedFinancialEntryModal({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showNewCategory, setShowNewCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [creatingCategory, setCreatingCategory] = useState(false);
 
   const loadReferenceData = useCallback(async () => {
     setLoading(true);
@@ -279,6 +289,8 @@ export function UnifiedFinancialEntryModal({
     if (!open) return;
 
     setForm(emptyForm());
+    setShowNewCategory(false);
+    setNewCategoryName("");
     void loadReferenceData();
 
     const previousOverflow = document.body.style.overflow;
@@ -368,6 +380,82 @@ export function UnifiedFinancialEntryModal({
     setForm((current) => ({ ...current, [field]: value }));
   }
 
+  async function createCustomCategory() {
+    const name = newCategoryName.trim().replace(/\s+/g, " ");
+
+    if (!name) {
+      setError("Informe o nome da nova categoria.");
+      return;
+    }
+
+    const kind =
+      form.kind === "income"
+        ? "income"
+        : form.kind === "investment_contribution" ||
+            form.kind === "investment_withdrawal"
+          ? "investment"
+          : "expense";
+
+    const existing = categories.find(
+      (category) =>
+        category.kind === kind &&
+        category.name.localeCompare(name, "pt-BR", { sensitivity: "base" }) === 0,
+    );
+
+    if (existing) {
+      update("categoryId", existing.id);
+      setShowNewCategory(false);
+      setNewCategoryName("");
+      setError(null);
+      return;
+    }
+
+    setCreatingCategory(true);
+    setError(null);
+
+    try {
+      const groupType =
+        kind === "income"
+          ? "income"
+          : kind === "investment"
+            ? "investment"
+            : "other";
+
+      const result = await supabase
+        .from("pf_categories")
+        .insert({
+          household_id: household.id,
+          name,
+          kind,
+          group_type: groupType,
+          is_system: false,
+        })
+        .select("id, name, kind")
+        .single();
+
+      if (result.error) throw result.error;
+
+      const created = result.data as Category;
+      setCategories((current) =>
+        [...current, created].sort((a, b) =>
+          a.name.localeCompare(b.name, "pt-BR"),
+        ),
+      );
+      update("categoryId", created.id);
+      setShowNewCategory(false);
+      setNewCategoryName("");
+      notifyFinancialChange();
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Não foi possível criar a categoria.",
+      );
+    } finally {
+      setCreatingCategory(false);
+    }
+  }
+
   function changeKind(kind: EntryKind) {
     const next = emptyForm(kind);
     const firstAccount =
@@ -388,7 +476,6 @@ export function UnifiedFinancialEntryModal({
       "investment_withdrawal",
     ].includes(form.kind);
 
-    if (!form.description.trim()) throw new Error("Informe a descrição.");
     if (!Number.isFinite(amount) || amount <= 0) {
       throw new Error("Informe um valor maior que zero.");
     }
@@ -428,6 +515,7 @@ export function UnifiedFinancialEntryModal({
       paid_at: paidAt,
       source: "manual",
       notes: form.notes.trim() || null,
+      is_essential: form.kind === "expense" ? form.isEssential : false,
       metadata: { origin: "unified_entry" },
     });
 
@@ -439,7 +527,6 @@ export function UnifiedFinancialEntryModal({
     const initialAmount = optionalAmount(form.initialAmount);
 
     if (!form.counterparty.trim()) throw new Error("Informe a pessoa ou empresa.");
-    if (!form.description.trim()) throw new Error("Informe a descrição.");
     if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
       throw new Error("Informe um valor total maior que zero.");
     }
@@ -454,7 +541,7 @@ export function UnifiedFinancialEntryModal({
     }
 
     const result = await supabase.rpc(
-      "pf_create_commitment_with_initial_settlement",
+      "pf_create_commitment_with_initial_settlement_v2",
       {
         target_household_id: household.id,
         commitment_direction: direction,
@@ -468,6 +555,8 @@ export function UnifiedFinancialEntryModal({
         commitment_visibility_scope: "family",
         commitment_notes: form.notes.trim() || null,
         commitment_source: "manual",
+        commitment_is_essential:
+          direction === "payable" ? form.isEssential : false,
         initial_settlement_amount: initialAmount,
         initial_settlement_account_id: initialAmount > 0 ? form.accountId : null,
         initial_settlement_date: form.date,
@@ -514,7 +603,6 @@ export function UnifiedFinancialEntryModal({
     const lateRate = optionalNumber(form.dailyLateInterestRate);
 
     if (!form.counterparty.trim()) throw new Error("Informe o credor.");
-    if (!form.description.trim()) throw new Error("Informe a descrição.");
     if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
       throw new Error("Informe um valor original maior que zero.");
     }
@@ -536,13 +624,14 @@ export function UnifiedFinancialEntryModal({
     }
 
     const result = await supabase.rpc(
-      "pf_create_other_debt_with_initial_payment",
+      "pf_create_debt_with_initial_payment_v2",
       {
         target_household_id: household.id,
         debt_creditor: form.counterparty.trim(),
-        debt_description: form.description.trim(),
+        debt_description:
+          form.description.trim() || `Dívida com ${form.counterparty.trim()}`,
         debt_original_amount: totalAmount,
-        debt_kind: form.debtKind,
+        target_debt_group: form.debtGroup,
         debt_start_date: form.date,
         debt_due_date: form.dueDate || null,
         debt_installment_amount: installmentAmount > 0 ? installmentAmount : null,
@@ -671,8 +760,18 @@ export function UnifiedFinancialEntryModal({
   const selectedSettlementOptions =
     form.kind === "settle_payable" ? payableCommitments : receivableCommitments;
 
-  return (
-    <div className="fixed inset-0 z-[180] overflow-y-auto bg-[#0D1B2A]/60 p-4 backdrop-blur-sm sm:p-6">
+  const entryDirection = directionForKind(form.kind);
+  const primaryOptions = PRIMARY_OPTIONS[entryDirection];
+  const isPrimaryKind = primaryOptions.some(
+    (option) => option.value === form.kind,
+  );
+
+  function changeDirection(direction: EntryDirection) {
+    changeKind(direction === "outgoing" ? "expense" : "income");
+  }
+
+  const modal = (
+    <div className="fixed inset-0 z-[500] overflow-y-auto bg-[#0D1B2A]/60 p-4 backdrop-blur-sm sm:p-6">
       <div className="mx-auto flex min-h-full max-w-4xl items-start justify-center">
         <div className="flex max-h-[calc(100dvh-2rem)] w-full flex-col overflow-hidden rounded-3xl border border-[#C8A15A]/25 bg-[#F7F5EF] shadow-2xl sm:max-h-[calc(100dvh-3rem)]">
           <header className="flex shrink-0 items-start justify-between gap-4 border-b border-[#0D1B2A]/10 px-6 py-5 sm:px-8">
@@ -701,28 +800,84 @@ export function UnifiedFinancialEntryModal({
 
           <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
             <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-5 sm:px-8 sm:py-6">
-              <label className="block space-y-2">
-                <span className="text-sm font-medium text-[#0D1B2A]">
-                  O que você quer registrar?
-                </span>
-                <select
-                  value={form.kind}
-                  onChange={(event) => changeKind(event.target.value as EntryKind)}
-                  className="h-12 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-4 text-sm outline-none focus:border-[#C8A15A]"
-                >
-                  {["Movimentações", "Compromissos", "Dívidas"].map((group) => (
-                    <optgroup key={group} label={group}>
-                      {ENTRY_OPTIONS.filter((option) => option.group === group).map(
-                        (option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ),
-                      )}
-                    </optgroup>
-                  ))}
-                </select>
-              </label>
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm font-medium text-[#0D1B2A]">
+                    O que vai acontecer?
+                  </p>
+                  <div className="mt-2 grid grid-cols-2 gap-2 rounded-2xl border border-[#0D1B2A]/10 bg-white p-1.5">
+                    <button
+                      type="button"
+                      onClick={() => changeDirection("outgoing")}
+                      className={[
+                        "h-11 rounded-xl text-sm font-semibold transition",
+                        entryDirection === "outgoing"
+                          ? "bg-[#0D1B2A] text-white shadow-sm"
+                          : "text-[#3A3A3C]/65 hover:bg-[#F7F5EF]",
+                      ].join(" ")}
+                    >
+                      Vou pagar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => changeDirection("incoming")}
+                      className={[
+                        "h-11 rounded-xl text-sm font-semibold transition",
+                        entryDirection === "incoming"
+                          ? "bg-[#0D1B2A] text-white shadow-sm"
+                          : "text-[#3A3A3C]/65 hover:bg-[#F7F5EF]",
+                      ].join(" ")}
+                    >
+                      Vou receber
+                    </button>
+                  </div>
+                </div>
+
+                <label className="block space-y-2">
+                  <span className="text-sm font-medium text-[#0D1B2A]">
+                    Tipo do registro
+                  </span>
+                  <select
+                    value={isPrimaryKind ? form.kind : ""}
+                    onChange={(event) =>
+                      changeKind(event.target.value as EntryKind)
+                    }
+                    className="h-12 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-4 text-sm outline-none focus:border-[#C8A15A]"
+                  >
+                    {!isPrimaryKind && (
+                      <option value="">Registro avançado selecionado</option>
+                    )}
+                    {primaryOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <details className="rounded-xl border border-[#0D1B2A]/8 bg-white/60 px-4 py-3">
+                  <summary className="cursor-pointer text-xs font-semibold text-[#3A3A3C]/60">
+                    Outros tipos de registro
+                  </summary>
+                  <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {SECONDARY_OPTIONS.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => changeKind(option.value)}
+                        className={[
+                          "rounded-lg border px-3 py-2 text-left text-xs font-medium transition",
+                          form.kind === option.value
+                            ? "border-[#C8A15A] bg-[#C8A15A]/10 text-[#0D1B2A]"
+                            : "border-[#0D1B2A]/10 bg-white text-[#3A3A3C]/65 hover:border-[#C8A15A]/50",
+                        ].join(" ")}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </details>
+              </div>
 
               {loading ? (
                 <div className="flex min-h-56 items-center justify-center">
@@ -742,7 +897,15 @@ export function UnifiedFinancialEntryModal({
                                 ? ArrowRightLeft
                                 : PiggyBank
                         }
-                        title="Movimentação"
+                        title={
+                          form.kind === "expense"
+                            ? "Despesa ou conta"
+                            : form.kind === "income"
+                              ? "Receita ou salário"
+                              : form.kind === "investment_contribution"
+                                ? "Investimento"
+                                : "Movimentação"
+                        }
                       />
 
                       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -765,17 +928,30 @@ export function UnifiedFinancialEntryModal({
                           onChange={(value) => update("amount", value)}
                           required
                         />
-                        <SelectField
-                          label="Status"
-                          value={form.status}
-                          onChange={(value) =>
-                            update("status", value as "paid" | "planned")
-                          }
-                          options={[
-                            { value: "paid", label: "Realizado" },
-                            { value: "planned", label: "Planejado" },
-                          ]}
-                        />
+                        {(form.kind === "expense" || form.kind === "income") && (
+                          <SelectField
+                            label={
+                              form.kind === "expense"
+                                ? "Status do pagamento"
+                                : "Status do recebimento"
+                            }
+                            value={form.status}
+                            onChange={(value) =>
+                              update("status", value as "paid" | "planned")
+                            }
+                            options={
+                              form.kind === "expense"
+                                ? [
+                                    { value: "paid", label: "Pago" },
+                                    { value: "planned", label: "A pagar" },
+                                  ]
+                                : [
+                                    { value: "paid", label: "Recebido" },
+                                    { value: "planned", label: "A receber" },
+                                  ]
+                            }
+                          />
+                        )}
                         <AccountSelect
                           label={
                             form.kind === "income"
@@ -806,16 +982,71 @@ export function UnifiedFinancialEntryModal({
                           />
                         )}
                         {form.kind !== "transfer" && (
-                          <SelectField
-                            label="Categoria"
-                            value={form.categoryId}
-                            onChange={(value) => update("categoryId", value)}
-                            options={categoryOptions.map((category) => ({
-                              value: category.id,
-                              label: category.name,
-                            }))}
-                            emptyLabel="Selecione"
-                          />
+                          <div className="space-y-2">
+                            <SelectField
+                              label="Categoria"
+                              value={form.categoryId}
+                              onChange={(value) => update("categoryId", value)}
+                              options={categoryOptions.map((category) => ({
+                                value: category.id,
+                                label: category.name,
+                              }))}
+                              emptyLabel="Selecione"
+                            />
+
+                            {!showNewCategory ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setShowNewCategory(true);
+                                  setError(null);
+                                }}
+                                disabled={!canWrite}
+                                className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#0D1B2A]/65 transition hover:text-[#0D1B2A] disabled:opacity-40"
+                              >
+                                <Plus size={14} />
+                                Adicionar categoria
+                              </button>
+                            ) : (
+                              <div className="flex gap-2">
+                                <input
+                                  type="text"
+                                  value={newCategoryName}
+                                  onChange={(event) =>
+                                    setNewCategoryName(event.target.value)
+                                  }
+                                  onKeyDown={(event) => {
+                                    if (event.key === "Enter") {
+                                      event.preventDefault();
+                                      void createCustomCategory();
+                                    }
+                                  }}
+                                  placeholder="Nome da nova categoria"
+                                  autoFocus
+                                  className="h-10 min-w-0 flex-1 rounded-xl border border-[#0D1B2A]/15 bg-white px-3 text-sm outline-none focus:border-[#C8A15A]"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => void createCustomCategory()}
+                                  disabled={creatingCategory || !newCategoryName.trim()}
+                                  className="h-10 rounded-xl bg-[#0D1B2A] px-3 text-xs font-semibold text-white disabled:opacity-50"
+                                >
+                                  {creatingCategory ? "Criando..." : "Adicionar"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setShowNewCategory(false);
+                                    setNewCategoryName("");
+                                  }}
+                                  disabled={creatingCategory}
+                                  className="h-10 rounded-xl border border-[#0D1B2A]/15 px-3 text-xs font-semibold text-[#0D1B2A] disabled:opacity-50"
+                                >
+                                  Cancelar
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         )}
                         <DateField
                           label="Data"
@@ -828,6 +1059,14 @@ export function UnifiedFinancialEntryModal({
                           onChange={(value) => update("dueDate", value)}
                         />
                       </div>
+
+                      {form.kind === "expense" && (
+                        <EssentialToggle
+                          checked={form.isEssential}
+                          onChange={(checked) => update("isEssential", checked)}
+                          description="Use para moradia, alimentação básica, escola, saúde, transporte e outras despesas que compõem seu custo de vida."
+                        />
+                      )}
                     </>
                   )}
 
@@ -896,6 +1135,14 @@ export function UnifiedFinancialEntryModal({
                           onChange={(value) => update("dueDate", value)}
                         />
                       </div>
+
+                      {form.kind === "payable" && (
+                        <EssentialToggle
+                          checked={form.isEssential}
+                          onChange={(checked) => update("isEssential", checked)}
+                          description="Marque quando esta conta fizer parte do seu custo de vida essencial. O dashboard usará somente contas marcadas para calcular a média."
+                        />
+                      )}
                     </>
                   )}
 
@@ -979,20 +1226,25 @@ export function UnifiedFinancialEntryModal({
                           label="Descrição"
                           value={form.description}
                           onChange={(value) => update("description", value)}
-                          required
                         />
                         <SelectField
-                          label="Tipo de dívida"
-                          value={form.debtKind}
-                          onChange={(value) => update("debtKind", value as DebtKind)}
+                          label="Classificação"
+                          value={form.debtGroup}
+                          onChange={(value) =>
+                            update(
+                              "debtGroup",
+                              value as "personal" | "other",
+                            )
+                          }
                           options={[
-                            { value: "bank_loan", label: "Empréstimo bancário" },
-                            { value: "financing", label: "Financiamento" },
-                            { value: "retail", label: "Loja ou crediário" },
-                            { value: "credit_card", label: "Cartão de crédito" },
-                            { value: "tax", label: "Imposto" },
-                            { value: "bill", label: "Conta vencida" },
-                            { value: "other", label: "Outra dívida" },
+                            {
+                              value: "personal",
+                              label: "Pessoal — amigos ou familiares",
+                            },
+                            {
+                              value: "other",
+                              label: "Outras dívidas — bancos ou terceiros",
+                            },
                           ]}
                         />
                         <MoneyField
@@ -1237,6 +1489,8 @@ export function UnifiedFinancialEntryModal({
       </div>
     </div>
   );
+
+  return createPortal(modal, document.body);
 }
 
 type IconType = typeof CircleDollarSign;
@@ -1369,6 +1623,35 @@ function SelectField({
           </option>
         ))}
       </select>
+    </label>
+  );
+}
+
+function EssentialToggle({
+  checked,
+  onChange,
+  description,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  description: string;
+}) {
+  return (
+    <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-[#C8A15A]/25 bg-[#C8A15A]/8 p-4">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        className="mt-0.5 h-5 w-5 shrink-0 accent-[#0D1B2A]"
+      />
+      <span>
+        <span className="block text-sm font-semibold text-[#0D1B2A]">
+          Despesa essencial
+        </span>
+        <span className="mt-1 block text-xs leading-5 text-[#3A3A3C]/60">
+          {description}
+        </span>
+      </span>
     </label>
   );
 }

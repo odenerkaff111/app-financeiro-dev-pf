@@ -1,26 +1,40 @@
-# Testes da Parte 2C2
+# Testes da Etapa 2
 
-## Dashboard
+## Recomendações
 
-Abra `/` e confirme a seção `Posição, pendências e alertas` no fim da página.
+1. Abra o Dashboard.
+2. Aguarde o painel Recomendações da Kyra.
+3. Clique em Atualizar análise.
+4. Confirme que as recomendações usam números existentes e não executam ações.
 
-Ela deve mostrar:
+## Evento de sessão
 
-- disponível agora;
-- contas abertas;
-- valores a receber;
-- dívidas atualizadas;
-- crescimento diário;
-- alertas objetivos.
+No SQL Editor, como proprietário:
 
-## Assistente
+```sql
+select event_type, severity, success, created_at
+from public.pf_security_events
+order by created_at desc
+limit 20;
+```
 
-Use uma conta existente no nome informado, por exemplo Santander.
+Deve existir `session_started` depois de uma nova sessão do navegador.
 
-1. `Tenho uma conta da Renner de R$ 4.000.`
-2. `Tenho R$ 3.000 para receber do João.`
-3. `Paguei R$ 500 da conta da Renner pelo Santander.`
-4. `João pagou R$ 500 do que me devia no Santander.`
-5. `Peguei um empréstimo de R$ 2.000 com o Banco X, juros de 3% ao mês, no Santander.`
+## Liquidação pelo Dashboard
 
-Em todos os casos, revise o cartão e confirme somente dados de teste.
+Registre uma liquidação em Próximas obrigações e procure por:
+
+```sql
+select event_type, resource_type, success, created_at
+from public.pf_security_events
+where event_type = 'obligation_settlement_confirmed'
+order by created_at desc;
+```
+
+## Retenção
+
+Não execute a limpeza em produção sem backup. A RPC é:
+
+```sql
+select public.pf_purge_expired_compliance_data('<HOUSEHOLD_ID>'::uuid);
+```

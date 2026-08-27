@@ -533,13 +533,13 @@ export async function POST(request: Request) {
         payload.description?.trim() || `Dívida com ${creditor}`;
 
       const result = await supabase.rpc(
-        "pf_create_other_debt_with_initial_payment",
+        "pf_create_debt_with_initial_payment_v2",
         {
           target_household_id: message.household_id,
           debt_creditor: creditor,
           debt_description: description,
           debt_original_amount: amount,
-          debt_kind: payload.debt_kind || "other",
+          target_debt_group: payload.debt_group || "other",
           debt_start_date: occurredOn,
           debt_due_date: payload.due_date,
           debt_installment_amount: null,

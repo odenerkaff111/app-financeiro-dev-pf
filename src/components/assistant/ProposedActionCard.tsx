@@ -190,6 +190,17 @@ export function ProposedActionCard({
           </div>
         )}
 
+        {actionType === "create_other_debt" && (
+          <Row
+            label="Classificação"
+            value={
+              payload.debt_group === "personal"
+                ? "Pessoal — amigos ou familiares"
+                : "Outras dívidas — bancos ou terceiros"
+            }
+          />
+        )}
+
         {actionType === "create_other_debt" &&
           payload.interest_enabled && (
             <Row

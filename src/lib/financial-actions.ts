@@ -38,6 +38,7 @@ export type FinancialActionPayload = {
   notes: string | null;
   count_installment: boolean | null;
   debt_kind: string | null;
+  debt_group: "personal" | "other" | null;
   interest_enabled: boolean | null;
   auto_accrue_interest: boolean | null;
   interest_rate: number | null;
@@ -128,6 +129,7 @@ export function emptyPayload(): FinancialActionPayload {
     notes: null,
     count_installment: null,
     debt_kind: null,
+    debt_group: null,
     interest_enabled: null,
     auto_accrue_interest: null,
     interest_rate: null,
@@ -285,6 +287,7 @@ function parseFinancialAmount(message: string) {
   const patterns = [
     /r\$\s*([\d.]+(?:,\d{1,2})?)/i,
     /([\d.]+(?:,\d{1,2})?)\s*reais?/i,
+    /(?:paguei|mandei|enviei|transferi|fiz\s+um\s+pix|pix)\b.*?([\d.]+(?:,\d{1,2})?)(?=\s|$|[.,;:])/i,
     /(?:peguei|recebi|emprestou|emprestado|empr[eé]stimo)\s+(?:de\s+)?([\d.]+(?:,\d{1,2})?)/i,
   ];
 
@@ -445,7 +448,16 @@ export function tryParseUnifiedFinancialAction(
   const account = findAccount(message, context);
   const debt = findDebt(message, context);
 
-  const paymentSignals = ["paguei", "pagamento", "fiz um pix", "pix para"];
+  const paymentSignals = [
+    "paguei",
+    "pagamento",
+    "mandei",
+    "enviei",
+    "transferi",
+    "fiz um pix",
+    "pix para",
+    "pix pra",
+  ];
   const looksLikePayment = paymentSignals.some((item) => normalized.includes(item));
 
   if (looksLikePayment && debt) {
@@ -625,6 +637,24 @@ export function tryParseUnifiedFinancialAction(
         ? "yearly"
         : "monthly";
     const interestMethod = normalized.includes("compost") ? "compound" : "simple";
+    const personalDebtSignals = [
+      "amigo",
+      "amiga",
+      "familia",
+      "familiar",
+      "parente",
+      "minha mae",
+      "meu pai",
+      "irmao",
+      "irma",
+      "esposa",
+      "marido",
+    ];
+    const debtGroup = personalDebtSignals.some((signal) =>
+      normalized.includes(signal),
+    )
+      ? "personal"
+      : "other";
 
     return {
       reply: "",
@@ -640,7 +670,8 @@ export function tryParseUnifiedFinancialAction(
         description: `Empréstimo com ${party}`,
         merchant: party,
         due_date: parseDate(message),
-        debt_kind: normalized.includes("financiamento") ? "financing" : "bank_loan",
+        debt_kind: "other",
+        debt_group: debtGroup,
         interest_enabled: rate > 0,
         auto_accrue_interest: rate > 0,
         interest_rate: rate,

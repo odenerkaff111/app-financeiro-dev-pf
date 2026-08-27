@@ -450,10 +450,14 @@ export async function POST(
     const admin =
       createSupabaseAdmin();
 
+    const appUrl =
+      process.env.NEXT_PUBLIC_APP_URL?.trim() ||
+      new URL(request.url).origin;
+
     const redirectTo =
       new URL(
         "/auth/definir-senha",
-        request.url,
+        appUrl,
       ).toString();
 
     let invitedUser:

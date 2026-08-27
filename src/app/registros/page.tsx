@@ -298,8 +298,8 @@ function getTypeOption(type: TransactionType | string): TypeOption {
     return {
       value: "expense",
       label: "Pagamento de dívida",
-      shortLabel: "Dívida paga",
-      icon: HandCoins,
+      shortLabel: "Saída",
+      icon: TrendingDown,
     };
   }
 
@@ -613,11 +613,17 @@ export default function TransactionsPage() {
         return false;
       }
 
-      if (
-        typeFilter !== "all" &&
-        transaction.type !== typeFilter
-      ) {
-        return false;
+      if (typeFilter !== "all") {
+        const matchesType =
+          typeFilter === "expense"
+            ? ["expense", "debt_payment"].includes(String(transaction.type))
+            : typeFilter === "income"
+              ? ["income", "debt_received"].includes(String(transaction.type))
+              : transaction.type === typeFilter;
+
+        if (!matchesType) {
+          return false;
+        }
       }
 
       const effectiveStatus =

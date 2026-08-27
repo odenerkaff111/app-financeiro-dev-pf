@@ -24,8 +24,8 @@ import {
   AppDock,
 } from "./AppDock";
 import {
-  AssistantLauncher,
-} from "./assistant/AssistantLauncher";
+  logSecurityEvent,
+} from "@/lib/security-events";
 
 export function AppLayout({
   children,
@@ -253,6 +253,7 @@ function AuthenticatedShell({
     usePathname();
 
   const {
+    household,
     isViewer,
   } =
     useHousehold();
@@ -262,6 +263,46 @@ function AuthenticatedShell({
     setFinancialDataVersion,
   ] =
     useState(0);
+
+  useEffect(() => {
+    const storageKey =
+      `pf:session-event:${household.id}`;
+
+    if (
+      window.sessionStorage.getItem(
+        storageKey,
+      )
+    ) {
+      return;
+    }
+
+    window.sessionStorage.setItem(
+      storageKey,
+      String(Date.now()),
+    );
+
+    void logSecurityEvent({
+      householdId:
+        household.id,
+      eventType:
+        "session_started",
+      severity:
+        "info",
+      success:
+        true,
+      resourceType:
+        "session",
+      metadata: {
+        route:
+          pathname ?? "/",
+        source:
+          "web",
+      },
+    });
+  }, [
+    household.id,
+    pathname,
+  ]);
 
   useEffect(() => {
     function refreshFinancialData() {
@@ -313,7 +354,7 @@ function AuthenticatedShell({
     <main className="relative min-h-screen overflow-x-hidden bg-[#F7F5EF] text-[#0D1B2A]">
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_12%_10%,rgba(200,161,90,0.08),transparent_27%),radial-gradient(circle_at_92%_90%,rgba(13,27,42,0.05),transparent_30%)]" />
 
-      <section className="relative mx-auto w-full max-w-[1600px] px-4 pb-28 pt-5 sm:px-6 sm:pb-32 sm:pt-7 lg:px-8">
+      <section className="relative mx-auto w-full max-w-[1600px] px-4 pb-10 pt-24 sm:px-6 sm:pt-28 lg:px-8">
         {isViewer && (
           <div className="mb-4 flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
             <Eye
@@ -335,7 +376,6 @@ function AuthenticatedShell({
         </div>
       </section>
 
-      <AssistantLauncher />
       <AppDock />
     </main>
   );

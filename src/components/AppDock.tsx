@@ -12,19 +12,14 @@ import {
   WalletCards,
   type LucideIcon,
 } from "lucide-react";
-import {
-  usePathname,
-  useRouter,
-} from "next/navigation";
-import {
-  useEffect,
-  useState,
-} from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 type NavigationItem = {
   href: string;
   label: string;
+  compactLabel: string;
   icon: LucideIcon;
   exact?: boolean;
 };
@@ -32,205 +27,159 @@ type NavigationItem = {
 const navigationItems: NavigationItem[] = [
   {
     href: "/",
-    label: "Visão Geral",
+    label: "Painel",
+    compactLabel: "Painel",
     icon: LayoutDashboard,
     exact: true,
   },
   {
     href: "/contas",
     label: "Contas e cartões",
+    compactLabel: "Contas",
     icon: WalletCards,
   },
   {
     href: "/registros",
     label: "Movimentações",
+    compactLabel: "Movimentações",
     icon: CircleDollarSign,
   },
   {
     href: "/dividas",
     label: "Dívidas",
+    compactLabel: "Dívidas",
     icon: HandCoins,
   },
   {
     href: "/assistente",
     label: "Assistente",
+    compactLabel: "Assistente",
     icon: Sparkles,
   },
   {
     href: "/configuracoes",
     label: "Configurações",
+    compactLabel: "Ajustes",
     icon: Settings,
   },
 ];
 
 export function AppDock() {
-  const pathname =
-    usePathname();
-
-  const router =
-    useRouter();
-
-  const [
-    loggingOut,
-    setLoggingOut,
-  ] = useState(false);
+  const pathname = usePathname();
+  const router = useRouter();
+  const [loggingOut, setLoggingOut] = useState(false);
 
   useEffect(() => {
-    const animationFrame =
-      window.requestAnimationFrame(
-        () => {
-          window.scrollTo({
-            top: 0,
-            behavior: "smooth",
-          });
-        },
-      );
+    const animationFrame = window.requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
 
     return () => {
-      window.cancelAnimationFrame(
-        animationFrame,
-      );
+      window.cancelAnimationFrame(animationFrame);
     };
   }, [pathname]);
 
-  function isItemActive(
-    item: NavigationItem,
-  ) {
+  function isItemActive(item: NavigationItem) {
     if (item.exact) {
-      return (
-        pathname ===
-        item.href
-      );
+      return pathname === item.href;
     }
 
-    return (
-      pathname ===
-        item.href ||
-      pathname.startsWith(
-        `${item.href}/`,
-      )
-    );
+    return pathname === item.href || pathname.startsWith(`${item.href}/`);
   }
 
   async function handleLogout() {
-    if (loggingOut) {
-      return;
-    }
+    if (loggingOut) return;
 
     setLoggingOut(true);
 
     try {
-      const { error } =
-        await supabase.auth.signOut();
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
 
-      if (error) {
-        throw error;
-      }
-
-      router.replace(
-        "/auth",
-      );
-
+      router.replace("/auth");
       router.refresh();
     } catch (error) {
-      console.error(
-        "Erro ao sair da conta:",
-        error,
-      );
-
+      console.error("Erro ao sair da conta:", error);
       setLoggingOut(false);
     }
   }
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-4 z-[100] flex justify-center px-2 sm:bottom-6 sm:px-3">
-      <nav
-        className="pointer-events-auto flex max-w-full items-center gap-1 overflow-x-auto rounded-[24px] border border-[#C8A15A]/30 bg-[#0D1B2A]/95 p-2 shadow-[0_20px_60px_rgba(13,27,42,0.32)] backdrop-blur-2xl"
-        aria-label="Navegação principal"
-      >
-        {navigationItems.map(
-          (item) => {
-            const Icon =
-              item.icon;
-
-            const active =
-              isItemActive(
-                item,
-              );
-
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                scroll={false}
-                aria-label={
-                  item.label
-                }
-                title={
-                  item.label
-                }
-                aria-current={
-                  active
-                    ? "page"
-                    : undefined
-                }
-                className={[
-                  "group relative flex h-11 w-11 shrink-0 items-center justify-center rounded-[15px] transition-all duration-200 sm:h-12 sm:w-12 sm:rounded-[16px]",
-                  "hover:-translate-y-1.5 hover:scale-105",
-                  active
-                    ? "bg-[#F7F5EF] text-[#0D1B2A] shadow-[0_8px_22px_rgba(0,0,0,0.22)]"
-                    : "text-[#F7F5EF]/75 hover:bg-white/10 hover:text-white",
-                ].join(" ")}
-              >
-                <Icon
-                  size={20}
-                  strokeWidth={
-                    active
-                      ? 2.3
-                      : 1.9
-                  }
-                />
-
-                {active && (
-                  <span className="absolute -bottom-1.5 h-1 w-1 rounded-full bg-[#C8A15A]" />
-                )}
-
-                <span className="pointer-events-none absolute -top-10 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-[#0D1B2A] px-2.5 py-1.5 text-[11px] font-medium text-[#F7F5EF] opacity-0 shadow-lg transition group-hover:opacity-100">
-                  {item.label}
-                </span>
-              </Link>
-            );
-          },
-        )}
-
-        <div className="mx-0.5 h-7 w-px shrink-0 bg-[#C8A15A]/30 sm:mx-1" />
-
-        <button
-          type="button"
-          onClick={() =>
-            void handleLogout()
-          }
-          disabled={
-            loggingOut
-          }
-          aria-label="Sair da conta"
-          title="Sair"
-          className="group relative flex h-11 w-11 shrink-0 items-center justify-center rounded-[15px] text-[#F7F5EF]/75 transition-all duration-200 hover:-translate-y-1.5 hover:scale-105 hover:bg-red-500/15 hover:text-red-200 disabled:opacity-50 sm:h-12 sm:w-12 sm:rounded-[16px]"
+    <header className="fixed inset-x-0 top-0 z-[120] border-b border-[#C8A15A]/20 bg-[#071321]/[0.98] shadow-[0_10px_35px_rgba(7,19,33,0.16)] backdrop-blur-2xl">
+      <div className="mx-auto flex h-[70px] w-full max-w-[1800px] items-center gap-3 px-3 sm:px-5 lg:px-7">
+        <Link
+          href="/"
+          className="hidden min-w-[132px] shrink-0 items-center gap-2 lg:flex"
+          aria-label="Ir para o painel"
         >
-          {loggingOut ? (
-            <Loader2 className="h-5 w-5 animate-spin" />
-          ) : (
-            <LogOut
-              size={20}
-              strokeWidth={1.9}
-            />
-          )}
-
-          <span className="pointer-events-none absolute -top-10 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-[#0D1B2A] px-2.5 py-1.5 text-[11px] font-medium text-[#F7F5EF] opacity-0 shadow-lg transition group-hover:opacity-100">
-            Sair
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#C8A15A]/35 bg-white/5 text-[#C8A15A]">
+            <CircleDollarSign size={19} strokeWidth={2.2} />
           </span>
-        </button>
-      </nav>
-    </div>
+          <span className="leading-none">
+            <span className="block text-[13px] font-bold tracking-[0.12em] text-white">
+              KYRA
+            </span>
+            <span className="mt-1 block text-[9px] font-semibold uppercase tracking-[0.2em] text-[#C8A15A]">
+              Finanças
+            </span>
+          </span>
+        </Link>
+
+        <div className="min-w-0 flex-1">
+          <nav
+            className="mx-auto flex w-fit max-w-full items-center gap-1 overflow-x-auto rounded-2xl border border-white/12 bg-white/[0.035] p-1.5"
+            aria-label="Navegação principal"
+          >
+            {navigationItems.map((item) => {
+              const Icon = item.icon;
+              const active = isItemActive(item);
+
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  scroll={false}
+                  aria-current={active ? "page" : undefined}
+                  title={item.label}
+                  className={[
+                    "flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl px-3 text-xs font-semibold transition-all sm:px-4 sm:text-sm",
+                    active
+                      ? "bg-[#F7F5EF] text-[#0D1B2A] shadow-sm"
+                      : "text-white/72 hover:bg-white/8 hover:text-white",
+                  ].join(" ")}
+                >
+                  <Icon
+                    size={17}
+                    strokeWidth={active ? 2.35 : 1.9}
+                    className="shrink-0"
+                  />
+                  <span className="hidden md:inline lg:hidden xl:inline">
+                    {item.compactLabel}
+                  </span>
+                </Link>
+              );
+            })}
+          </nav>
+        </div>
+
+        <div className="flex min-w-[44px] shrink-0 justify-end lg:min-w-[132px]">
+          <button
+            type="button"
+            onClick={() => void handleLogout()}
+            disabled={loggingOut}
+            aria-label="Sair da conta"
+            title="Sair"
+            className="flex h-10 items-center justify-center gap-2 rounded-xl border border-white/10 px-3 text-xs font-semibold text-white/70 transition hover:border-red-300/30 hover:bg-red-500/10 hover:text-red-100 disabled:opacity-50"
+          >
+            {loggingOut ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <LogOut size={17} />
+            )}
+            <span className="hidden lg:inline">Sair</span>
+          </button>
+        </div>
+      </div>
+    </header>
   );
 }

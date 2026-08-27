@@ -1,0 +1,12 @@
+AJUSTE - METADADOS DE PAGAMENTO DE DIVIDA
+
+O que corrige:
+- Descricao: "Pagamento de divida"
+- Segunda linha/contraparte: nome real do credor (ex.: VANDA)
+- Categoria: "Dividas"
+- Tipo exibido na tela de Movimentacoes: "Saida"
+- Pagamentos antigos do tipo debt_payment tambem sao normalizados pela migration.
+
+Importante:
+- O tipo interno no banco continua debt_payment. Isso e intencional para preservar os calculos do motor financeiro.
+- Execute a migration 021 no SQL Editor do Supabase depois de extrair o ZIP.

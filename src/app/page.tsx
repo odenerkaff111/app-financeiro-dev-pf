@@ -36,10 +36,12 @@ import {
 import { ptBR } from "date-fns/locale";
 import { supabase } from "@/lib/supabase";
 import { useHousehold } from "@/contexts/HouseholdContext";
-import { SpendingCategoryChart } from "@/components/SpendingCategoryChart";
+import { SpendingCategoryChart } from "@/components/dashboard/SpendingCategoryChart";
 import { DebtSummarySection } from "@/components/DebtSummarySection";
 import { MonthlyClosingSection } from "@/components/MonthlyClosingSection";
-import { FinancialHealthOverview } from "@/components/FinancialHealthOverview";
+import { UpcomingObligations } from "@/components/dashboard/UpcomingObligations";
+import { InvestmentOverview } from "@/components/dashboard/InvestmentOverview";
+import { CostOfLivingCard } from "@/components/dashboard/CostOfLivingCard";
 
 type PeriodFilter =
   | "today"
@@ -346,9 +348,16 @@ export default function DashboardPage() {
         }
 
         try {
-          const date = parseISO(
-            transaction.occurred_on,
-          );
+          const effectiveStatus =
+            getEffectiveStatus(transaction);
+
+          const referenceDate =
+            effectiveStatus === "planned" ||
+            effectiveStatus === "overdue"
+              ? transaction.due_date ?? transaction.occurred_on
+              : transaction.occurred_on;
+
+          const date = parseISO(referenceDate);
 
           if (periodFilter === "today") {
             return isToday(date);
@@ -434,12 +443,7 @@ export default function DashboardPage() {
         if (
           transaction.status === "paid"
         ) {
-          if (
-            transaction.type ===
-              "income" ||
-            transaction.type ===
-              "debt_received"
-          ) {
+          if (transaction.type === "income") {
             income += amount;
           }
 
@@ -572,9 +576,8 @@ export default function DashboardPage() {
       periodTransactions.forEach(
         (transaction) => {
           if (
-            transaction.status !==
-              "paid" ||
-            transaction.type !== "expense"
+            transaction.type !== "expense" ||
+            transaction.status === "cancelled"
           ) {
             return;
           }
@@ -722,105 +725,63 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6 pb-10">
-      <div className="flex justify-center">
-        <div className="flex max-w-full items-center gap-1 overflow-x-auto rounded-2xl border border-[#0D1B2A]/10 bg-white/80 p-1.5 shadow-sm backdrop-blur">
-          {periods.map((period) => {
-            const active =
-              periodFilter ===
-              period.value;
-
-            return (
-              <button
-                key={period.value}
-                type="button"
-                onClick={() =>
-                  setPeriodFilter(
-                    period.value,
-                  )
-                }
-                className={[
-                  "shrink-0 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all",
-                  active
-                    ? "bg-[#0D1B2A] text-[#F7F5EF] shadow-md"
-                    : "text-[#3A3A3C]/70 hover:bg-[#C8A15A]/10 hover:text-[#0D1B2A]",
-                ].join(" ")}
-              >
-                {period.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-{error && (
+      {error && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
         </div>
       )}
 
       <section className="rounded-2xl border border-[#0D1B2A]/10 bg-white p-5 shadow-sm">
-        <div>
-          <h2 className="text-base font-semibold text-[#0D1B2A]">
-            Resumo financeiro
-          </h2>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h2 className="text-xl font-semibold tracking-tight text-[#0D1B2A]">
+              Resumo financeiro
+            </h2>
+            <p className="mt-1 text-xs text-[#3A3A3C]/55">
+              Sua posição atual e os movimentos do período selecionado.
+            </p>
+          </div>
 
-          <p className="mt-1 text-xs text-[#3A3A3C]/55">
-            Saldos e movimentações do período selecionado.
-          </p>
+          <PeriodFilterControl
+            periods={periods}
+            value={periodFilter}
+            onChange={setPeriodFilter}
+          />
         </div>
 
-        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
           <MetricCard
-          label="Disponível"
-          value={metrics.available}
-          icon={Wallet}
-          variant="default"
-        />
+            label="Disponível"
+            value={metrics.available}
+            icon={Wallet}
+            variant="default"
+          />
 
-        <MetricCard
-          label="Entradas"
-          value={metrics.income}
-          icon={ArrowUpCircle}
-          variant="positive"
-        />
+          <FlowMetricCard
+            income={metrics.income}
+            expense={metrics.expense}
+          />
 
-        <MetricCard
-          label="Saídas"
-          value={metrics.expense}
-          icon={ArrowDownCircle}
-          variant="negative"
-        />
+          <MetricCard
+            label="A receber"
+            value={metrics.receivable}
+            icon={Receipt}
+            variant="positive"
+          />
 
-        <MetricCard
-          label="A receber"
-          value={metrics.receivable}
-          icon={Receipt}
-          variant="positive"
-        />
+          <MetricCard
+            label="A pagar"
+            value={metrics.payable}
+            icon={Clock}
+            variant={metrics.overdue > 0 ? "negative" : "warning"}
+            detail={
+              metrics.overdue > 0
+                ? `${formatCurrency(metrics.overdue)} em atraso`
+                : undefined
+            }
+          />
 
-        <MetricCard
-          label="A pagar"
-          value={metrics.payable}
-          icon={Clock}
-          variant={
-            metrics.overdue > 0
-              ? "negative"
-              : "warning"
-          }
-          detail={
-            metrics.overdue > 0
-              ? `${formatCurrency(
-                  metrics.overdue,
-                )} em atraso`
-              : undefined
-          }
-        />
-
-        <MetricCard
-          label="Investido"
-          value={metrics.invested}
-          icon={PiggyBank}
-          variant="gold"
-        />
+          <CostOfLivingCard />
         </div>
 
         <div className="my-6 h-px bg-[#0D1B2A]/10" />
@@ -828,210 +789,100 @@ export default function DashboardPage() {
         <DebtSummarySection />
       </section>
 
-      <FinancialHealthOverview />
-
-
       <MonthlyClosingSection />
 
-      <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-        <article className="rounded-2xl border border-[#0D1B2A]/10 bg-white p-5 shadow-sm xl:col-span-2">
-          <h2 className="text-lg font-semibold text-[#0D1B2A]">
-            Fluxo financeiro mensal
-          </h2>
-
-          <p className="mt-1 text-sm text-[#3A3A3C]/60">
-            Entradas e saídas realizadas no ano atual.
-          </p>
-
-          <div className="mt-6 h-72 min-w-0">
-            <ResponsiveContainer
-              width="100%"
-              height="100%"
-            >
-              <BarChart
-                data={monthlyChartData}
-                margin={{
-                  top: 10,
-                  right: 10,
-                  left: 0,
-                  bottom: 0,
-                }}
-              >
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  vertical={false}
-                  stroke="#E5E7EB"
-                />
-
-                <XAxis
-                  dataKey="name"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{
-                    fill: "#6B7280",
-                    fontSize: 12,
-                  }}
-                />
-
-                <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{
-                    fill: "#6B7280",
-                    fontSize: 12,
-                  }}
-                  tickFormatter={
-                    formatCompactCurrency
-                  }
-                />
-
-                <RechartsTooltip
-                  formatter={(value) => formatCurrency(Number(value ?? 0))}
-                  contentStyle={{
-                    borderRadius: "12px",
-                    border:
-                      "1px solid #E5E7EB",
-                    boxShadow:
-                      "0 8px 30px rgba(13,27,42,.08)",
-                  }}
-                />
-
-                <Bar
-                  dataKey="Entradas"
-                  fill="#047857"
-                  radius={[5, 5, 0, 0]}
-                  barSize={18}
-                />
-
-                <Bar
-                  dataKey="Saídas"
-                  fill="#B91C1C"
-                  radius={[5, 5, 0, 0]}
-                  barSize={18}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </article>
-
-        <SpendingCategoryChart
-            categoryData={categoryChartData}
-            periodFilter={periodFilter}
-          />
-      </section>
-
-      <section className="rounded-2xl border border-[#0D1B2A]/10 bg-white p-5 shadow-sm">
-        <div className="flex items-center gap-2">
-          <AlertCircle
-            size={19}
-            className="text-[#C8A15A]"
-          />
-
-          <h2 className="text-lg font-semibold text-[#0D1B2A]">
-            Movimentações pendentes
-          </h2>
+      <section className="grid grid-cols-1 items-stretch gap-6 xl:grid-cols-3">
+        <div className="xl:col-span-2">
+          <InvestmentOverview />
         </div>
 
-        {pendingTransactions.length ===
-        0 ? (
-          <div className="py-10 text-center text-sm text-[#3A3A3C]/50">
-            Nenhuma movimentação pendente.
-          </div>
-        ) : (
-          <div className="mt-5 divide-y divide-[#0D1B2A]/8">
-            {pendingTransactions.map(
-              (transaction) => {
-                const status =
-                  getEffectiveStatus(
-                    transaction,
-                  );
-
-                const isIncome =
-                  transaction.type ===
-                  "income";
-
-                return (
-                  <div
-                    key={transaction.id}
-                    className="flex flex-col gap-4 py-4 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={[
-                            "h-2.5 w-2.5 rounded-full",
-                            status ===
-                            "overdue"
-                              ? "bg-red-500"
-                              : "bg-amber-400",
-                          ].join(" ")}
-                        />
-
-                        <p className="truncate font-medium text-[#0D1B2A]">
-                          {
-                            transaction.description
-                          }
-                        </p>
-                      </div>
-
-                      <p className="mt-1 pl-4 text-xs text-[#3A3A3C]/55">
-                        {isIncome
-                          ? "A receber"
-                          : "A pagar"}{" "}
-                        •{" "}
-                        {formatDate(
-                          transaction.due_date,
-                        )}
-                      </p>
-                    </div>
-
-                    <div className="flex items-center justify-between gap-4 sm:justify-end">
-                      <span
-                        className={[
-                          "font-semibold",
-                          isIncome
-                            ? "text-emerald-700"
-                            : "text-red-700",
-                        ].join(" ")}
-                      >
-                        {formatCurrency(
-                          transaction.amount,
-                        )}
-                      </span>
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          void markAsPaid(
-                            transaction,
-                          )
-                        }
-                        disabled={
-                          updatingId ===
-                          transaction.id
-                        }
-                        className="flex h-9 items-center gap-2 rounded-lg bg-[#0D1B2A] px-3 text-xs font-semibold text-white disabled:opacity-60"
-                      >
-                        {updatingId ===
-                        transaction.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <CheckCircle2
-                            size={15}
-                          />
-                        )}
-
-                        Realizar
-                      </button>
-                    </div>
-                  </div>
-                );
-              },
-            )}
-          </div>
-        )}
+        <SpendingCategoryChart
+          categoryData={categoryChartData}
+          periodFilter={periodFilter}
+        />
       </section>
+
+      <UpcomingObligations />
     </div>
+  );
+}
+
+type PeriodOption = {
+  value: PeriodFilter;
+  label: string;
+};
+
+function PeriodFilterControl({
+  periods,
+  value,
+  onChange,
+}: {
+  periods: PeriodOption[];
+  value: PeriodFilter;
+  onChange: (value: PeriodFilter) => void;
+}) {
+  return (
+    <div className="flex max-w-full items-center gap-1 overflow-x-auto rounded-xl border border-[#0D1B2A]/10 bg-[#F7F5EF] p-1">
+      {periods.map((period) => {
+        const active = value === period.value;
+
+        return (
+          <button
+            key={period.value}
+            type="button"
+            onClick={() => onChange(period.value)}
+            className={[
+              "shrink-0 rounded-lg px-3 py-2 text-xs font-semibold transition sm:px-3.5",
+              active
+                ? "bg-[#0D1B2A] text-white shadow-sm"
+                : "text-[#3A3A3C]/60 hover:bg-white hover:text-[#0D1B2A]",
+            ].join(" ")}
+          >
+            {period.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function FlowMetricCard({
+  income,
+  expense,
+}: {
+  income: number;
+  expense: number;
+}) {
+  return (
+    <article className="rounded-2xl border border-[#0D1B2A]/10 bg-white p-5 shadow-sm">
+      <p className="text-sm text-[#3A3A3C]/65">
+        Entradas e saídas
+      </p>
+
+      <div className="mt-3 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-emerald-700">
+            <ArrowUpCircle size={17} />
+            <span className="text-xs font-medium">Entradas</span>
+          </div>
+          <span className="font-semibold text-emerald-800">
+            {formatCurrency(income)}
+          </span>
+        </div>
+
+        <div className="h-px bg-[#0D1B2A]/8" />
+
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-red-700">
+            <ArrowDownCircle size={17} />
+            <span className="text-xs font-medium">Saídas</span>
+          </div>
+          <span className="font-semibold text-red-800">
+            {formatCurrency(expense)}
+          </span>
+        </div>
+      </div>
+    </article>
   );
 }
 

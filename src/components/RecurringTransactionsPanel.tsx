@@ -1,10 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import {
-  CalendarClock,
   CheckCircle2,
-  CircleDollarSign,
   Clock,
   Loader2,
   Pencil,
@@ -14,7 +11,6 @@ import {
   TrendingDown,
   TrendingUp,
   Variable,
-  WalletCards,
   X,
 } from "lucide-react";
 import {
@@ -59,28 +55,6 @@ type RecurringTemplate = {
 
   is_active: boolean;
   notes: string | null;
-};
-
-type DebtCommitment = {
-  id: string;
-  creditor: string;
-
-  installment_amount:
-    | number
-    | string
-    | null;
-
-  paid_installments: number;
-
-  total_installments:
-    | number
-    | null;
-
-  current_balance:
-    | number
-    | string;
-
-  status: string;
 };
 
 type RecurringTransaction = {
@@ -245,12 +219,7 @@ export function RecurringTransactionsPanel() {
     RecurringTemplate[]
   >([]);
 
-  const [
-    debts,
-    setDebts,
-  ] = useState<
-    DebtCommitment[]
-  >([]);
+
 
   const [
     recurringTransactions,
@@ -345,7 +314,6 @@ export function RecurringTransactionsPanel() {
 
         const [
           templatesResult,
-          debtsResult,
           transactionsResult,
         ] = await Promise.all([
           supabase
@@ -361,26 +329,6 @@ export function RecurringTransactionsPanel() {
               "day_of_month",
               {
                 ascending: true,
-              },
-            ),
-
-          supabase
-            .from(
-              "pf_debt_progress",
-            )
-            .select("id, creditor, installment_amount, paid_installments, total_installments, current_balance, status")
-            .eq(
-              "household_id",
-              household.id,
-            )
-            .neq(
-              "status",
-              "cancelled",
-            )
-            .order(
-              "current_balance",
-              {
-                ascending: false,
               },
             ),
 
@@ -424,19 +372,7 @@ export function RecurringTransactionsPanel() {
           return;
         }
 
-        if (debtsResult.error) {
-          console.error(
-            "Erro ao carregar parcelas de dívidas:",
-            debtsResult.error,
-          );
 
-          setError(
-            "Não foi possível carregar as parcelas de dívidas.",
-          );
-
-          setLoading(false);
-          return;
-        }
 
         if (
           transactionsResult.error
@@ -461,12 +397,7 @@ export function RecurringTransactionsPanel() {
           ) as unknown as RecurringTemplate[],
         );
 
-        setDebts(
-          (
-            debtsResult.data ??
-            []
-          ) as unknown as DebtCommitment[],
-        );
+
 
         setRecurringTransactions(
           (
@@ -526,101 +457,6 @@ export function RecurringTransactionsPanel() {
       recurringTransactions,
     ]);
 
-  const summary =
-    useMemo(() => {
-      const activeTemplates =
-        templates.filter(
-          (template) =>
-            template.is_active,
-        );
-
-      const fixedIncome =
-        activeTemplates
-          .filter(
-            (template) =>
-              template.type ===
-                "income" &&
-              !template.is_variable,
-          )
-          .reduce(
-            (
-              total,
-              template,
-            ) =>
-              total +
-              Number(
-                template.amount ??
-                  0,
-              ),
-            0,
-          );
-
-      const fixedExpenses =
-        activeTemplates
-          .filter(
-            (template) =>
-              template.type ===
-                "expense" &&
-              !template.is_variable,
-          )
-          .reduce(
-            (
-              total,
-              template,
-            ) =>
-              total +
-              Number(
-                template.amount ??
-                  0,
-              ),
-            0,
-          );
-
-      const variableCount =
-        activeTemplates.filter(
-          (template) =>
-            template.is_variable,
-        ).length;
-
-      const debtMonthly =
-        debts
-          .filter(
-            (debt) =>
-              debt.status !==
-              "paid",
-          )
-          .reduce(
-            (
-              total,
-              debt,
-            ) =>
-              total +
-              Number(
-                debt.installment_amount ??
-                  0,
-              ),
-            0,
-          );
-
-      return {
-        fixedIncome,
-        fixedExpenses,
-        variableCount,
-        debtMonthly,
-
-        minimumCommitment:
-          fixedExpenses +
-          debtMonthly,
-
-        minimumBalance:
-          fixedIncome -
-          fixedExpenses -
-          debtMonthly,
-      };
-    }, [
-      templates,
-      debts,
-    ]);
 
   async function generateMonth() {
     setGenerating(true);
@@ -980,59 +816,7 @@ export function RecurringTransactionsPanel() {
         </div>
       )}
 
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <SummaryCard
-          label="Renda recorrente"
-          value={formatCurrency(
-            summary.fixedIncome,
-          )}
-          icon={TrendingUp}
-          positive
-        />
 
-        <SummaryCard
-          label="Despesas fixas"
-          value={formatCurrency(
-            summary.fixedExpenses,
-          )}
-          icon={TrendingDown}
-          negative
-        />
-
-        <SummaryCard
-          label="Parcelas pessoais"
-          value={formatCurrency(
-            summary.debtMonthly,
-          )}
-          icon={WalletCards}
-          negative
-        />
-
-        <SummaryCard
-          label="Compromisso mínimo"
-          value={formatCurrency(
-            summary.minimumCommitment,
-          )}
-          icon={CalendarClock}
-        />
-
-        <SummaryCard
-          label="Sobra antes dos variáveis"
-          value={formatCurrency(
-            summary.minimumBalance,
-          )}
-          icon={CircleDollarSign}
-          positive={
-            summary.minimumBalance >=
-            0
-          }
-          negative={
-            summary.minimumBalance <
-            0
-          }
-          detail={`${summary.variableCount} contas com valor variável`}
-        />
-      </section>
 
       <section className="rounded-2xl border border-[#0D1B2A]/10 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -1234,77 +1018,7 @@ export function RecurringTransactionsPanel() {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-[#0D1B2A]/10 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-[#0D1B2A]">
-              Parcelas de dívidas pessoais
-            </h2>
 
-            <p className="mt-1 text-sm text-[#3A3A3C]/60">
-              O valor mensal é a referência, mas
-              pagamentos parciais continuam
-              permitidos.
-            </p>
-          </div>
-
-          <Link
-            href="/dividas"
-            className="text-sm font-semibold text-[#0D1B2A] hover:underline"
-          >
-            Gerenciar dívidas
-          </Link>
-        </div>
-
-        <div className="mt-5 divide-y divide-[#0D1B2A]/8">
-          {debts.map(
-            (debt) => (
-              <div
-                key={debt.id}
-                className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div>
-                  <p className="font-medium text-[#0D1B2A]">
-                    {debt.creditor}
-                  </p>
-
-                  <p className="mt-0.5 text-xs text-[#3A3A3C]/50">
-                    {
-                      debt.paid_installments
-                    }
-                    /
-                    {debt.total_installments ??
-                      "—"}{" "}
-                    parcelas
-                  </p>
-                </div>
-
-                <div className="text-left sm:text-right">
-                  <p className="font-semibold text-[#0D1B2A]">
-                    {formatCurrency(
-                      debt.installment_amount,
-                    )}
-                  </p>
-
-                  <p className="mt-0.5 text-xs text-[#3A3A3C]/50">
-                    Saldo:{" "}
-                    {formatCurrency(
-                      debt.current_balance,
-                    )}
-                  </p>
-                </div>
-              </div>
-            ),
-          )}
-        </div>
-
-        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800">
-          Quando não conseguir pagar a parcela
-          inteira, use “Registrar pagamento” na tela
-          de dívidas e informe apenas o valor que
-          realmente enviou.
-        </div>
-      </section>
 
       {editingTemplate && (
         <div className="fixed inset-0 z-[140] overflow-y-auto bg-[#0D1B2A]/55 backdrop-blur-sm">
@@ -1725,64 +1439,5 @@ export function RecurringTransactionsPanel() {
         </div>
       )}
     </div>
-  );
-}
-
-function SummaryCard({
-  label,
-  value,
-  detail,
-  icon: Icon,
-  positive,
-  negative,
-}: {
-  label: string;
-  value: string;
-  detail?: string;
-
-  icon:
-    typeof TrendingUp;
-
-  positive?: boolean;
-  negative?: boolean;
-}) {
-  return (
-    <article className="rounded-2xl border border-[#0D1B2A]/10 bg-white p-5 shadow-sm">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-sm text-[#3A3A3C]/65">
-          {label}
-        </p>
-
-        <Icon
-          size={18}
-          className={
-            positive
-              ? "text-emerald-700"
-              : negative
-                ? "text-red-700"
-                : "text-[#C8A15A]"
-          }
-        />
-      </div>
-
-      <p
-        className={[
-          "mt-3 text-2xl font-semibold",
-          positive
-            ? "text-emerald-800"
-            : negative
-              ? "text-red-800"
-              : "text-[#0D1B2A]",
-        ].join(" ")}
-      >
-        {value}
-      </p>
-
-      {detail && (
-        <p className="mt-2 text-xs text-[#3A3A3C]/55">
-          {detail}
-        </p>
-      )}
-    </article>
   );
 }

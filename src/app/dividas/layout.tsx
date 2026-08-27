@@ -1,12 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import {
-  BadgeDollarSign,
-  HandCoins,
-  Landmark,
-  ReceiptText,
-} from "lucide-react";
+import { HandCoins, Landmark } from "lucide-react";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
@@ -21,16 +16,6 @@ const items = [
     href: "/dividas/outras",
     label: "Outras dívidas",
     icon: Landmark,
-  },
-  {
-    href: "/dividas/contas-a-pagar",
-    label: "Contas a pagar",
-    icon: ReceiptText,
-  },
-  {
-    href: "/dividas/valores-a-receber",
-    label: "A receber",
-    icon: BadgeDollarSign,
   },
 ];
 
@@ -56,7 +41,7 @@ export default function DividasLayout({
                 key={item.href}
                 href={item.href}
                 className={[
-                  "inline-flex shrink-0 items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-semibold transition",
+                  "inline-flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition",
                   active
                     ? "bg-[#0D1B2A] text-white"
                     : "text-[#3A3A3C]/65 hover:bg-[#F7F5EF] hover:text-[#0D1B2A]",
