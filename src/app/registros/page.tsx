@@ -90,7 +90,7 @@ type Category = {
 type Transaction = {
   id: string;
   household_id: string;
-  account_id: string;
+  account_id: string | null;
   destination_account_id: string | null;
   category_id: string | null;
   debt_id: string | null;
@@ -442,6 +442,18 @@ export default function TransactionsPage() {
     setLoading(true);
     setPageError(null);
 
+    const recurringGeneration = await supabase.rpc(
+      "pf_generate_recurring_transactions",
+      { target_month: `${getToday().slice(0, 7)}-01` },
+    );
+
+    if (recurringGeneration.error) {
+      console.warn(
+        "Não foi possível gerar recorrências do mês:",
+        recurringGeneration.error,
+      );
+    }
+
     const [
       sessionResult,
       accountsResult,
@@ -588,9 +600,9 @@ export default function TransactionsPage() {
       .toLowerCase();
 
     return transactions.filter((transaction) => {
-      const account = accountMap.get(
-        transaction.account_id,
-      );
+      const account = transaction.account_id
+        ? accountMap.get(transaction.account_id)
+        : undefined;
 
       const category = transaction.category_id
         ? categoryMap.get(transaction.category_id)
@@ -858,7 +870,7 @@ export default function TransactionsPage() {
       merchant:
         transaction.merchant ?? "",
       amount: String(transaction.amount),
-      account_id: transaction.account_id,
+      account_id: transaction.account_id ?? "",
       destination_account_id:
         transaction.destination_account_id ??
         "",
@@ -971,7 +983,12 @@ export default function TransactionsPage() {
       return;
     }
 
-    if (!form.account_id) {
+    const requiresSourceAccount = [
+      "transfer",
+      "investment_withdrawal",
+    ].includes(form.type);
+
+    if (requiresSourceAccount && !form.account_id) {
       setModalError(
         "Selecione a conta de origem.",
       );
@@ -1050,7 +1067,7 @@ export default function TransactionsPage() {
 
     const payload = {
       household_id: household.id,
-      account_id: form.account_id,
+      account_id: form.account_id || null,
       destination_account_id:
         requiresDestination
           ? form.destination_account_id
@@ -1442,10 +1459,9 @@ export default function TransactionsPage() {
               <tbody>
                 {filteredTransactions.map(
                   (transaction) => {
-                    const account =
-                      accountMap.get(
-                        transaction.account_id,
-                      );
+                    const account = transaction.account_id
+                      ? accountMap.get(transaction.account_id)
+                      : undefined;
 
                     const destinationAccount =
                       transaction.destination_account_id
@@ -1510,9 +1526,14 @@ export default function TransactionsPage() {
 
                             <div>
                               <p className="text-[#0D1B2A]">
-                                {account?.name ??
-                                  "Conta removida"}
+                                {account?.name ?? "Não informada"}
                               </p>
+
+                              {account?.institution_name && (
+                                <p className="mt-0.5 text-xs text-[#3A3A3C]/55">
+                                  {account.institution_name}
+                                </p>
+                              )}
 
                               {destinationAccount && (
                                 <p className="mt-0.5 text-xs text-[#3A3A3C]/55">
@@ -1831,20 +1852,15 @@ export default function TransactionsPage() {
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <label className="space-y-2">
                       <span className="text-sm font-medium text-[#0D1B2A]">
-                        {form.type ===
-                        "investment_withdrawal"
+                        {form.type === "investment_withdrawal"
                           ? "Investimento de origem"
-                          : form.type ===
-                              "income"
-                            ? "Conta que recebeu"
-                            : form.type ===
-                                "expense"
-                              ? "Conta que pagou"
-                              : "Conta de origem"}
+                          : form.type === "transfer"
+                            ? "Conta de origem"
+                            : "Conta bancária (opcional)"}
                       </span>
 
                       <select
-                        required
+                        required={["transfer", "investment_withdrawal"].includes(form.type)}
                         value={form.account_id}
                         onChange={(event) => {
                           const accountId =
@@ -1866,7 +1882,9 @@ export default function TransactionsPage() {
                         className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-4 text-sm outline-none focus:border-[#C8A15A] focus:ring-2 focus:ring-[#C8A15A]/20"
                       >
                         <option value="">
-                          Selecione
+                          {["transfer", "investment_withdrawal"].includes(form.type)
+                            ? "Selecione"
+                            : "Não informada"}
                         </option>
 
                         {sourceAccountOptions.map(
@@ -1877,10 +1895,11 @@ export default function TransactionsPage() {
                                 account.id
                               }
                             >
-                              {account.name} —{" "}
-                              {formatCurrency(
-                                account.balance,
-                              )}
+                              {account.name}
+                              {account.institution_name
+                                ? ` · ${account.institution_name}`
+                                : ""}
+                              {` — ${formatCurrency(account.balance)}`}
                             </option>
                           ),
                         )}

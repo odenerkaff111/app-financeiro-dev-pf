@@ -77,6 +77,7 @@ type FormState = {
   status: "paid" | "planned";
   notes: string;
   isEssential: boolean;
+  isRecurring: boolean;
 
   commitmentId: string;
   debtId: string;
@@ -171,6 +172,7 @@ function emptyForm(kind: EntryKind = "expense"): FormState {
     status: "paid",
     notes: "",
     isEssential: false,
+    isRecurring: false,
     commitmentId: "",
     debtId: "",
     debtGroup: "personal",
@@ -273,14 +275,28 @@ export function UnifiedFinancialEntryModal({
     setDebts((debtsResult.data ?? []) as DebtPosition[]);
     setCommitments((commitmentsResult.data ?? []) as CommitmentProgress[]);
 
-    setForm((current) => ({
-      ...current,
-      accountId:
-        current.accountId ||
-        loadedAccounts.find((account) => account.type !== "investment")?.id ||
-        loadedAccounts[0]?.id ||
-        "",
-    }));
+    setForm((current) => {
+      const needsExplicitAccount = [
+        "transfer",
+        "investment_withdrawal",
+        "debt_payment",
+        "settle_payable",
+        "settle_receivable",
+      ].includes(current.kind);
+
+      const preferredAccount =
+        current.kind === "investment_withdrawal"
+          ? loadedAccounts.find((account) => account.type === "investment")
+          : loadedAccounts.find((account) => account.type !== "investment") ??
+            loadedAccounts[0];
+
+      return {
+        ...current,
+        accountId:
+          current.accountId ||
+          (needsExplicitAccount ? preferredAccount?.id ?? "" : ""),
+      };
+    });
 
     setLoading(false);
   }, [household.id]);
@@ -456,7 +472,10 @@ export function UnifiedFinancialEntryModal({
       update("categoryId", created.id);
       setShowNewCategory(false);
       setNewCategoryName("");
-      notifyFinancialChange();
+      // Nao dispare o refresh global aqui: o AppLayout remonta a pagina
+      // quando recebe esse evento e isso fechava o modal no meio do cadastro.
+      // A categoria ja foi adicionada ao estado local e o refresh global
+      // acontecera normalmente quando o registro financeiro for salvo.
     } catch (caught) {
       setError(
         caught instanceof Error
@@ -470,28 +489,95 @@ export function UnifiedFinancialEntryModal({
 
   function changeKind(kind: EntryKind) {
     const next = emptyForm(kind);
+    const needsExplicitAccount = [
+      "transfer",
+      "investment_withdrawal",
+      "debt_payment",
+      "settle_payable",
+      "settle_receivable",
+    ].includes(kind);
+
     const firstAccount =
       kind === "investment_withdrawal"
         ? accounts.find((account) => account.type === "investment")
         : accounts.find((account) => account.type !== "investment") ?? accounts[0];
 
-    next.accountId = firstAccount?.id ?? "";
+    next.accountId = needsExplicitAccount ? firstAccount?.id ?? "" : "";
+
+    if (kind === "investment_contribution") {
+      next.categoryId =
+        categories.find((category) => category.kind === "investment")?.id ?? "";
+    }
+
     setForm(next);
     setError(null);
+  }
+
+  async function ensureInvestmentDestination(userId: string) {
+    const institution = form.counterparty.trim().replace(/\s+/g, " ");
+
+    if (!institution) {
+      throw new Error("Informe onde você está investindo, por exemplo: Rico.");
+    }
+
+    const normalize = (value: string | null) =>
+      (value ?? "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .trim()
+        .toLowerCase();
+
+    const normalizedInstitution = normalize(institution);
+    const existing = accounts.find(
+      (account) =>
+        account.type === "investment" &&
+        (normalize(account.institution_name) === normalizedInstitution ||
+          normalize(account.name) === normalizedInstitution ||
+          normalize(account.name) === normalize(`Investimentos - ${institution}`)),
+    );
+
+    if (existing) return existing.id;
+
+    const result = await supabase
+      .from("pf_accounts")
+      .insert({
+        household_id: household.id,
+        owner_user_id: userId,
+        name: `Investimentos - ${institution}`,
+        institution_name: institution,
+        type: "investment",
+        balance: 0,
+        source: "manual",
+        is_shared: true,
+        is_active: true,
+      })
+      .select("id, name, institution_name, type, balance")
+      .single();
+
+    if (result.error) throw result.error;
+
+    const created = result.data as Account;
+    setAccounts((current) => [...current, created]);
+    return created.id;
   }
 
   async function saveDirectTransaction(userId: string) {
     const amount = parsePtBrAmount(form.amount);
     const requiresDestination = [
       "transfer",
-      "investment_contribution",
+      "investment_withdrawal",
+    ].includes(form.kind);
+    const requiresSourceAccount = [
+      "transfer",
       "investment_withdrawal",
     ].includes(form.kind);
 
     if (!Number.isFinite(amount) || amount <= 0) {
       throw new Error("Informe um valor maior que zero.");
     }
-    if (!form.accountId) throw new Error("Selecione uma conta.");
+    if (requiresSourceAccount && !form.accountId) {
+      throw new Error("Selecione uma conta.");
+    }
     if (requiresDestination && !form.destinationAccountId) {
       throw new Error("Selecione a conta de destino.");
     }
@@ -513,9 +599,21 @@ export function UnifiedFinancialEntryModal({
         throw new Error("Informe para quem você deve.");
       }
 
+      const fallbackAccountId =
+        form.accountId ||
+        accounts.find((account) => account.type !== "investment")?.id ||
+        accounts[0]?.id ||
+        "";
+
+      if (!fallbackAccountId) {
+        throw new Error(
+          "Cadastre ao menos uma conta para concluir o vínculo técnico desta dívida.",
+        );
+      }
+
       const debtResult = await supabase.rpc("pf_create_debt_obligation_v1", {
         target_household_id: household.id,
-        obligation_account_id: form.accountId,
+        obligation_account_id: fallbackAccountId,
         debt_creditor: form.counterparty.trim(),
         debt_description:
           form.description.trim() || `Dívida com ${form.counterparty.trim()}`,
@@ -533,6 +631,26 @@ export function UnifiedFinancialEntryModal({
       });
 
       if (debtResult.error) throw debtResult.error;
+
+      if (!form.accountId) {
+        const created = Array.isArray(debtResult.data)
+          ? debtResult.data[0]
+          : debtResult.data;
+        const transactionId = created?.obligation_transaction_id as
+          | string
+          | undefined;
+
+        if (transactionId) {
+          const clearAccountResult = await supabase
+            .from("pf_transactions")
+            .update({ account_id: null })
+            .eq("id", transactionId)
+            .eq("household_id", household.id);
+
+          if (clearAccountResult.error) throw clearAccountResult.error;
+        }
+      }
+
       return;
     }
 
@@ -542,14 +660,26 @@ export function UnifiedFinancialEntryModal({
         : null;
 
     const effectiveDueDate =
-      form.kind === "income" ? form.date : form.dueDate || form.date;
+      form.kind === "income"
+        ? form.date
+        : form.kind === "expense"
+          ? form.dueDate || form.date
+          : form.date;
 
-    const result = await supabase.from("pf_transactions").insert({
+    let destinationAccountId: string | null = requiresDestination
+      ? form.destinationAccountId
+      : null;
+
+    if (form.kind === "investment_contribution") {
+      destinationAccountId = await ensureInvestmentDestination(userId);
+    }
+
+    const result = await supabase
+      .from("pf_transactions")
+      .insert({
       household_id: household.id,
-      account_id: form.accountId,
-      destination_account_id: requiresDestination
-        ? form.destinationAccountId
-        : null,
+      account_id: form.accountId || null,
+      destination_account_id: destinationAccountId,
       category_id: form.categoryId || null,
       created_by: userId,
       responsible_user_id: userId,
@@ -566,9 +696,31 @@ export function UnifiedFinancialEntryModal({
       notes: form.notes.trim() || null,
       is_essential: form.kind === "expense" ? form.isEssential : false,
       metadata: { origin: "unified_entry" },
-    });
+    })
+      .select("id")
+      .single();
 
     if (result.error) throw result.error;
+
+    if (
+      form.isRecurring &&
+      (form.kind === "expense" || form.kind === "income") &&
+      !isDebtExpenseCategory
+    ) {
+      const recurringResult = await supabase.rpc(
+        "pf_make_transaction_monthly_recurring_v1",
+        { target_transaction_id: result.data.id },
+      );
+
+      if (recurringResult.error) {
+        await supabase
+          .from("pf_transactions")
+          .delete()
+          .eq("id", result.data.id)
+          .eq("household_id", household.id);
+        throw recurringResult.error;
+      }
+    }
   }
 
   async function saveCommitment(direction: "payable" | "receivable") {
@@ -803,7 +955,6 @@ export function UnifiedFinancialEntryModal({
   );
   const requiresDestination = [
     "transfer",
-    "investment_contribution",
     "investment_withdrawal",
   ].includes(form.kind);
   const selectedSettlementOptions =
@@ -966,10 +1117,19 @@ export function UnifiedFinancialEntryModal({
                           required
                         />
                         <TextField
-                          label="Pessoa ou estabelecimento"
+                          label={
+                            form.kind === "investment_contribution"
+                              ? "Onde você investiu?"
+                              : "Pessoa ou estabelecimento"
+                          }
                           value={form.counterparty}
                           onChange={(value) => update("counterparty", value)}
-                          placeholder="Opcional"
+                          placeholder={
+                            form.kind === "investment_contribution"
+                              ? "Ex.: Rico"
+                              : "Opcional"
+                          }
+                          required={form.kind === "investment_contribution"}
                         />
                         <MoneyField
                           label="Valor"
@@ -1001,36 +1161,58 @@ export function UnifiedFinancialEntryModal({
                             }
                           />
                         )}
-                        <AccountSelect
-                          label={
-                            form.kind === "income"
-                              ? form.status === "planned"
-                                ? "Conta prevista para receber"
-                                : "Conta que recebeu"
-                              : form.kind === "investment_withdrawal"
-                                ? "Investimento de origem"
-                                : "Conta de origem ou pagamento"
-                          }
-                          value={form.accountId}
-                          onChange={(value) => {
-                            update("accountId", value);
-                            if (form.destinationAccountId === value) {
-                              update("destinationAccountId", "");
-                            }
-                          }}
-                          accounts={sourceAccounts}
-                        />
-                        {requiresDestination && (
+                        {(form.kind === "transfer" ||
+                          form.kind === "investment_withdrawal") && (
                           <AccountSelect
                             label={
-                              form.kind === "investment_contribution"
-                                ? "Investimento de destino"
-                                : "Conta de destino"
+                              form.kind === "investment_withdrawal"
+                                ? "Investimento de origem"
+                                : "Conta de origem"
                             }
+                            value={form.accountId}
+                            onChange={(value) => {
+                              update("accountId", value);
+                              if (form.destinationAccountId === value) {
+                                update("destinationAccountId", "");
+                              }
+                            }}
+                            accounts={sourceAccounts}
+                          />
+                        )}
+                        {requiresDestination && (
+                          <AccountSelect
+                            label="Conta de destino"
                             value={form.destinationAccountId}
                             onChange={(value) => update("destinationAccountId", value)}
                             accounts={destinationAccounts}
                           />
+                        )}
+                        {(form.kind === "expense" ||
+                          form.kind === "income" ||
+                          form.kind === "investment_contribution") && (
+                          <details className="rounded-xl border border-[#0D1B2A]/10 bg-white/60 px-4 py-3 md:col-span-2">
+                            <summary className="cursor-pointer text-xs font-semibold text-[#3A3A3C]/60">
+                              Conta bancária (opcional)
+                            </summary>
+                            <div className="mt-3">
+                              <AccountSelect
+                                label={
+                                  form.kind === "income"
+                                    ? "Conta que recebe"
+                                    : "Conta de origem ou pagamento"
+                                }
+                                value={form.accountId}
+                                onChange={(value) => update("accountId", value)}
+                                accounts={sourceAccounts}
+                                optional
+                              />
+                            </div>
+                          </details>
+                        )}
+                        {form.kind === "investment_contribution" && (
+                          <div className="rounded-xl border border-[#C8A15A]/25 bg-[#C8A15A]/8 px-4 py-3 text-xs leading-5 text-[#0D1B2A]/70 md:col-span-2">
+                            O investimento de destino será organizado automaticamente pela instituição informada acima. Você não precisa cadastrar uma conta de investimento antes.
+                          </div>
                         )}
                         {form.kind !== "transfer" && (
                           <div className="space-y-2">
@@ -1047,6 +1229,7 @@ export function UnifiedFinancialEntryModal({
 
                                 if (form.kind === "expense" && normalizedName === "dividas") {
                                   update("status", "planned");
+                                  update("isRecurring", false);
                                 }
                               }}
                               options={categoryOptions.map((category) => ({
@@ -1140,7 +1323,7 @@ export function UnifiedFinancialEntryModal({
                           value={form.date}
                           onChange={(value) => update("date", value)}
                         />
-                        {form.kind !== "income" && (
+                        {form.kind === "expense" && (
                           <DateField
                             label="Vencimento"
                             value={form.dueDate}
@@ -1148,6 +1331,18 @@ export function UnifiedFinancialEntryModal({
                           />
                         )}
                       </div>
+
+                      {(form.kind === "expense" || form.kind === "income") &&
+                        !isDebtExpenseCategory && (
+                          <RecurringToggle
+                            checked={form.isRecurring}
+                            onChange={(checked) => update("isRecurring", checked)}
+                            day={Number(
+                              (form.kind === "income" ? form.date : form.dueDate || form.date)
+                                .slice(8, 10),
+                            )}
+                          />
+                        )}
 
                       {form.kind === "expense" && (
                         <EssentialToggle
@@ -1716,6 +1911,37 @@ function SelectField({
   );
 }
 
+function RecurringToggle({
+  checked,
+  onChange,
+  day,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  day: number;
+}) {
+  return (
+    <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-[#0D1B2A]/10 bg-white p-4">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        className="mt-0.5 h-5 w-5 shrink-0 accent-[#0D1B2A]"
+      />
+      <span>
+        <span className="block text-sm font-semibold text-[#0D1B2A]">
+          Repetir todo mês
+        </span>
+        <span className="mt-1 block text-xs leading-5 text-[#3A3A3C]/60">
+          {Number.isFinite(day) && day > 0
+            ? `O sistema criará automaticamente um novo lançamento por volta do dia ${day} de cada mês.`
+            : "O sistema criará automaticamente um novo lançamento mensal."}
+        </span>
+      </span>
+    </label>
+  );
+}
+
 function EssentialToggle({
   checked,
   onChange,
@@ -1769,7 +1995,9 @@ function AccountSelect({
         <option value="">{optional ? "Opcional" : "Selecione"}</option>
         {accounts.map((account) => (
           <option key={account.id} value={account.id}>
-            {account.name} — {formatCurrency(account.balance)}
+            {account.name}
+            {account.institution_name ? ` · ${account.institution_name}` : ""}
+            {` — ${formatCurrency(account.balance)}`}
           </option>
         ))}
       </select>

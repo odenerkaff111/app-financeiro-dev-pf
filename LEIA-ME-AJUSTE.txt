@@ -1,19 +1,21 @@
-AJUSTE RECEBIMENTOS + FILTRO PERSONALIZADO
+AJUSTE - PLANEJAMENTO, PROJECAO, VALOR EFETIVO E GRAFICO
 
-Sem migration SQL.
+1. Criar categoria nao fecha mais o modal de novo registro.
+2. Projecao do periodo usa entradas realizadas + a receber - saidas realizadas - a pagar - reservas de planejamentos.
+3. Novo painel Planejamento mensal no Dashboard.
+   - Exemplo: Aniversario da minha filha = R$ 500.
+   - Exemplo: Contabilidade = R$ 2.350.
+   - O nome do planejamento vira/usa uma categoria de despesa.
+   - Cada compra nessa categoria reduz o valor ainda reservado.
+4. Conta prevista pode ser paga/recebida por valor diferente do previsto.
+   - Exemplo: previsto R$ 65, efetivo R$ 60 ou R$ 72.
+   - Para movimentacoes simples, a conta bancaria e opcional.
+5. Grafico Gastos e compromissos usa o nome real das categorias.
+   - Nao agrupa Outros ou categorias personalizadas como Despesa.
+   - Categorias exibidas recebem cores distintas.
 
-Alteracoes:
-- Receita/Salario com status A receber usa uma unica data: "Data prevista do recebimento".
-- Receita ja recebida usa "Data do recebimento".
-- Remove o campo Vencimento redundante para receitas.
-- Conta muda para "Conta prevista para receber" quando o recebimento ainda nao ocorreu.
-- Dashboard: adiciona filtro Personalizado (data inicial e final).
-- Movimentacoes: adiciona filtro Personalizado (data inicial e final).
-- Movimentacoes planejadas sao filtradas pela data prevista/vencimento.
-- O card A receber passa a exibir receitas planejadas quando a data delas estiver dentro do periodo selecionado.
-- Atrasos de recebimentos nao entram no detalhe "A pagar em atraso".
-- Grafico Gastos e compromissos respeita o periodo personalizado.
-
-Exemplo atual:
-Recebimento previsto para 04/09/2026 nao aparece em "Este mes" se o mes atual for agosto.
-Selecione Personalizado de 01/09/2026 a 30/09/2026 (ou Todo periodo) para visualizar o valor em A receber e Movimentacoes.
+APLICACAO
+- Copie os arquivos deste ZIP sobre a raiz do projeto.
+- Rode a migration 026 inteira no SQL Editor do Supabase.
+- Limpe .next e execute npm run dev.
+- TypeScript validado com: npx tsc --noEmit

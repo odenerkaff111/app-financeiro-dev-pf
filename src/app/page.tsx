@@ -42,6 +42,7 @@ import { MonthlyClosingSection } from "@/components/MonthlyClosingSection";
 import { UpcomingObligations } from "@/components/dashboard/UpcomingObligations";
 import { InvestmentOverview } from "@/components/dashboard/InvestmentOverview";
 import { CostOfLivingCard } from "@/components/dashboard/CostOfLivingCard";
+import { BudgetPlanningPanel } from "@/components/dashboard/BudgetPlanningPanel";
 
 type PeriodFilter =
   | "today"
@@ -105,6 +106,13 @@ type Transaction = {
   occurred_on: string;
   due_date: string | null;
   paid_at: string | null;
+};
+
+type Budget = {
+  id: string;
+  category_id: string;
+  month: string;
+  amount: number | string;
 };
 
 const MONTH_NAMES = [
@@ -176,6 +184,38 @@ function getToday() {
   return `${year}-${month}-${day}`;
 }
 
+
+function monthStartKey(value: string) {
+  return `${value.slice(0, 7)}-01`;
+}
+
+function relevantBudgetMonths(
+  periodFilter: PeriodFilter,
+  customStart: string,
+  customEnd: string,
+) {
+  if (periodFilter === "month") {
+    return new Set([monthStartKey(getToday())]);
+  }
+
+  if (periodFilter !== "custom" || !customStart || !customEnd || customStart > customEnd) {
+    return new Set<string>();
+  }
+
+  const months = new Set<string>();
+  const cursor = new Date(`${customStart.slice(0, 7)}-01T12:00:00`);
+  const end = new Date(`${customEnd.slice(0, 7)}-01T12:00:00`);
+
+  while (cursor <= end) {
+    months.add(
+      `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}-01`,
+    );
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+
+  return months;
+}
+
 function getEffectiveStatus(
   transaction: Transaction,
 ): TransactionStatus {
@@ -203,6 +243,9 @@ export default function DashboardPage() {
   const [transactions, setTransactions] =
     useState<Transaction[]>([]);
 
+  const [budgets, setBudgets] =
+    useState<Budget[]>([]);
+
   const [periodFilter, setPeriodFilter] =
     useState<PeriodFilter>("month");
   const [customStart, setCustomStart] = useState(getToday());
@@ -223,10 +266,23 @@ export default function DashboardPage() {
       setLoading(true);
       setError(null);
 
+      const recurringGeneration = await supabase.rpc(
+        "pf_generate_recurring_transactions",
+        { target_month: `${getToday().slice(0, 7)}-01` },
+      );
+
+      if (recurringGeneration.error) {
+        console.warn(
+          "Não foi possível gerar recorrências do mês:",
+          recurringGeneration.error,
+        );
+      }
+
       const [
         accountsResult,
         categoriesResult,
         transactionsResult,
+        budgetsResult,
       ] = await Promise.all([
         supabase
           .from("pf_accounts")
@@ -264,6 +320,11 @@ export default function DashboardPage() {
           .order("created_at", {
             ascending: false,
           }),
+
+        supabase
+          .from("pf_budgets")
+          .select("id, category_id, month, amount")
+          .eq("household_id", household.id),
       ]);
 
       if (accountsResult.error) {
@@ -308,6 +369,20 @@ export default function DashboardPage() {
         return;
       }
 
+      if (budgetsResult.error) {
+        console.error(
+          "Erro ao carregar planejamentos:",
+          budgetsResult.error,
+        );
+
+        setError(
+          "Não foi possível carregar os planejamentos.",
+        );
+
+        setLoading(false);
+        return;
+      }
+
       setAccounts(
         (accountsResult.data ??
           []) as Account[],
@@ -321,6 +396,10 @@ export default function DashboardPage() {
       setTransactions(
         (transactionsResult.data ??
           []) as Transaction[],
+      );
+
+      setBudgets(
+        (budgetsResult.data ?? []) as Budget[],
       );
 
       setLoading(false);
@@ -514,6 +593,64 @@ export default function DashboardPage() {
   }, [
     accounts,
     periodTransactions,
+  ]);
+
+  const budgetReserve = useMemo(() => {
+    const relevantMonths = relevantBudgetMonths(
+      periodFilter,
+      customStart,
+      customEnd,
+    );
+
+    if (relevantMonths.size === 0 || budgets.length === 0) {
+      return 0;
+    }
+
+    const committedByCategoryMonth = new Map<string, number>();
+
+    transactions.forEach((transaction) => {
+      if (
+        transaction.type !== "expense" ||
+        transaction.status === "cancelled" ||
+        !transaction.category_id
+      ) {
+        return;
+      }
+
+      const effectiveStatus = getEffectiveStatus(transaction);
+      const referenceDate =
+        effectiveStatus === "planned" || effectiveStatus === "overdue"
+          ? transaction.due_date ?? transaction.occurred_on
+          : transaction.occurred_on;
+      const month = monthStartKey(referenceDate);
+
+      if (!relevantMonths.has(month)) {
+        return;
+      }
+
+      const key = `${transaction.category_id}:${month}`;
+      committedByCategoryMonth.set(
+        key,
+        (committedByCategoryMonth.get(key) ?? 0) + Number(transaction.amount || 0),
+      );
+    });
+
+    return budgets.reduce((total, budget) => {
+      if (!relevantMonths.has(budget.month)) {
+        return total;
+      }
+
+      const key = `${budget.category_id}:${budget.month}`;
+      const committed = committedByCategoryMonth.get(key) ?? 0;
+      const remaining = Math.max(Number(budget.amount || 0) - committed, 0);
+      return total + remaining;
+    }, 0);
+  }, [
+    budgets,
+    transactions,
+    periodFilter,
+    customStart,
+    customEnd,
   ]);
 
   const monthlyChartData =
@@ -811,7 +948,22 @@ export default function DashboardPage() {
         <DebtSummarySection />
       </section>
 
-      <MonthlyClosingSection />
+      <MonthlyClosingSection
+        periodFilter={periodFilter}
+        income={metrics.income}
+        receivable={metrics.receivable}
+        expense={metrics.expense}
+        payable={metrics.payable}
+        budgetReserve={budgetReserve}
+      />
+
+      <BudgetPlanningPanel
+        defaultMonth={
+          periodFilter === "custom" && customStart
+            ? customStart.slice(0, 7)
+            : getToday().slice(0, 7)
+        }
+      />
 
       <section className="grid grid-cols-1 items-stretch gap-6 xl:grid-cols-3">
         <div className="xl:col-span-2">

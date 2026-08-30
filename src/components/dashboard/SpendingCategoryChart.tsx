@@ -57,16 +57,24 @@ type SpendingCategoryChartProps = {
   customEnd?: string;
 };
 
-const CATEGORY_COLORS: Record<string, string> = {
-  Investimento: "#047857",
-  Educação: "#7C3AED",
-  Despesa: "#64748B",
-  Dívidas: "#B91C1C",
-  "Contas abertas": "#B45309",
-  Alimentação: "#C8A15A",
-  Saúde: "#0369A1",
-  Diversão: "#BE123C",
-};
+const CATEGORY_PALETTE = [
+  "#0F766E",
+  "#B91C1C",
+  "#1D4ED8",
+  "#A16207",
+  "#7E22CE",
+  "#BE123C",
+  "#047857",
+  "#C2410C",
+  "#334155",
+  "#0369A1",
+  "#4D7C0F",
+  "#9F1239",
+  "#5B21B6",
+  "#0E7490",
+  "#92400E",
+  "#4338CA",
+];
 
 const PERIOD_LABELS: Record<PeriodFilter, string> = {
   today: "hoje",
@@ -85,72 +93,11 @@ function formatCurrency(value: number | string | null) {
   }).format(Number.isFinite(amount) ? amount : 0);
 }
 
-function normalizeText(value: string) {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim()
-    .toLowerCase();
-}
-
-function normalizeCategoryName(categoryName: string) {
-  const name = normalizeText(categoryName);
-
-  if (
-    name.includes("invest") ||
-    name.includes("tesouro") ||
-    name.includes("aplicacao")
-  ) {
-    return "Investimento";
-  }
-
-  if (
-    name.includes("educ") ||
-    name.includes("escola") ||
-    name.includes("curso") ||
-    name.includes("faculdade")
-  ) {
-    return "Educação";
-  }
-
-  if (
-    name.includes("divida") ||
-    name.includes("financiamento")
-  ) {
-    return "Dívidas";
-  }
-
-  if (
-    name.includes("aliment") ||
-    name.includes("mercado") ||
-    name.includes("supermercado") ||
-    name.includes("restaurante") ||
-    name.includes("delivery")
-  ) {
-    return "Alimentação";
-  }
-
-  if (
-    name.includes("saude") ||
-    name.includes("academia") ||
-    name.includes("medico") ||
-    name.includes("farmacia") ||
-    name.includes("dentista")
-  ) {
-    return "Saúde";
-  }
-
-  if (
-    name.includes("divers") ||
-    name.includes("lazer") ||
-    name.includes("entretenimento") ||
-    name.includes("cinema") ||
-    name.includes("streaming")
-  ) {
-    return "Diversão";
-  }
-
-  return "Despesa";
+function fallbackCategoryColor(index: number) {
+  // Golden-angle hue spacing keeps generated colors distinct even when
+  // the number of custom categories grows beyond the fixed palette.
+  const hue = Math.round((index * 137.508) % 360);
+  return `hsl(${hue} 68% 42%)`;
 }
 
 function isDateInPeriod(
@@ -289,7 +236,7 @@ export function SpendingCategoryChart({
     const totals = new Map<string, number>();
 
     categoryData.forEach((category) => {
-      const name = normalizeCategoryName(category.name);
+      const name = category.name.trim() || "Sem categoria";
       totals.set(
         name,
         (totals.get(name) ?? 0) + Number(category.value || 0),
@@ -353,6 +300,20 @@ export function SpendingCategoryChart({
     customEnd,
   ]);
 
+  const colorByCategory = useMemo(() => {
+    const names = chartData
+      .map((item) => item.name)
+      .slice()
+      .sort((first, second) => first.localeCompare(second, "pt-BR"));
+
+    return new Map(
+      names.map((name, index) => [
+        name,
+        CATEGORY_PALETTE[index] ?? fallbackCategoryColor(index),
+      ]),
+    );
+  }, [chartData]);
+
   if (loading) {
     return (
       <article className="flex h-full min-h-[500px] items-center justify-center rounded-2xl border border-[#0D1B2A]/10 bg-white shadow-sm">
@@ -402,9 +363,7 @@ export function SpendingCategoryChart({
                   {chartData.map((category) => (
                     <Cell
                       key={category.name}
-                      fill={
-                        CATEGORY_COLORS[category.name] ?? "#64748B"
-                      }
+                      fill={colorByCategory.get(category.name)}
                     />
                   ))}
                 </Pie>
@@ -432,8 +391,7 @@ export function SpendingCategoryChart({
                   <span
                     className="h-2.5 w-2.5 shrink-0 rounded-full"
                     style={{
-                      backgroundColor:
-                        CATEGORY_COLORS[category.name] ?? "#64748B",
+                      backgroundColor: colorByCategory.get(category.name),
                     }}
                   />
                   <span className="truncate text-[#3A3A3C]/70">

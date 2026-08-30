@@ -291,7 +291,9 @@ export function UpcomingObligations() {
       return;
     }
 
-    if (!form.account_id) {
+    const isSimpleTransaction = selected.source_type === "transaction";
+
+    if (!isSimpleTransaction && !form.account_id) {
       setError(
         selected.direction === "payable"
           ? "Selecione a conta usada no pagamento."
@@ -308,7 +310,7 @@ export function UpcomingObligations() {
       return;
     }
 
-    if (amount > remaining + 0.005) {
+    if (!isSimpleTransaction && amount > remaining + 0.005) {
       setError(
         `O valor não pode ser maior que ${formatCurrency(remaining)}.`,
       );
@@ -332,7 +334,7 @@ export function UpcomingObligations() {
             "pf_register_pending_transaction_settlement",
             {
               target_transaction_id: selected.source_id,
-              target_account_id: form.account_id,
+              target_account_id: form.account_id || null,
               settlement_amount: amount,
               settlement_date: form.settled_on,
               settlement_notes: form.notes.trim() || null,
@@ -607,31 +609,35 @@ export function UpcomingObligations() {
 
               <form onSubmit={registerSettlement}>
                 <div className="space-y-4 px-6 py-5">
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <label className="space-y-2">
-                      <span className="text-sm font-medium text-[#0D1B2A]">
-                        {selected.direction === "payable"
-                          ? "Conta usada"
-                          : "Conta que recebeu"}
-                      </span>
-                      <select
-                        value={form.account_id}
-                        onChange={(event) =>
-                          setForm((current) => ({
-                            ...current,
-                            account_id: event.target.value,
-                          }))
-                        }
-                        className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-4 text-sm outline-none focus:border-[#C8A15A]"
-                      >
-                        <option value="">Selecione</option>
-                        {accounts.map((account) => (
-                          <option key={account.id} value={account.id}>
-                            {account.name} — {formatCurrency(account.balance)}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                  <div className={selected.source_type === "transaction" ? "grid grid-cols-1 gap-4" : "grid grid-cols-1 gap-4 sm:grid-cols-2"}>
+                    {selected.source_type === "commitment" && (
+                      <label className="space-y-2">
+                        <span className="text-sm font-medium text-[#0D1B2A]">
+                          {selected.direction === "payable"
+                            ? "Conta usada"
+                            : "Conta que recebeu"}
+                        </span>
+                        <select
+                          value={form.account_id}
+                          onChange={(event) =>
+                            setForm((current) => ({
+                              ...current,
+                              account_id: event.target.value,
+                            }))
+                          }
+                          className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-4 text-sm outline-none focus:border-[#C8A15A]"
+                        >
+                          <option value="">Selecione</option>
+                          {accounts.map((account) => (
+                            <option key={account.id} value={account.id}>
+                              {account.name}
+                              {account.institution_name ? ` · ${account.institution_name}` : ""}
+                              {` — ${formatCurrency(account.balance)}`}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
 
                     <label className="space-y-2">
                       <span className="text-sm font-medium text-[#0D1B2A]">
@@ -653,7 +659,11 @@ export function UpcomingObligations() {
 
                   <label className="block space-y-2">
                     <span className="flex items-center justify-between gap-3 text-sm font-medium text-[#0D1B2A]">
-                      Valor
+                      {selected.source_type === "transaction"
+                        ? selected.direction === "payable"
+                          ? "Valor efetivamente pago"
+                          : "Valor efetivamente recebido"
+                        : "Valor"}
                       <button
                         type="button"
                         onClick={() =>
@@ -668,7 +678,7 @@ export function UpcomingObligations() {
                         }
                         className="text-xs font-semibold text-[#8A641F] hover:underline"
                       >
-                        Usar valor integral
+                        Usar valor previsto
                       </button>
                     </span>
                     <input
@@ -684,6 +694,11 @@ export function UpcomingObligations() {
                       placeholder="0,00"
                       className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-4 text-sm outline-none focus:border-[#C8A15A]"
                     />
+                    {selected.source_type === "transaction" && (
+                      <span className="block text-xs leading-5 text-[#3A3A3C]/55">
+                        Previsto: {formatCurrency(selected.remaining_amount)}. Você pode informar um valor maior ou menor; o valor efetivo substituirá a previsão e encerrará esta conta.
+                      </span>
+                    )}
                   </label>
 
                   <label className="block space-y-2">
