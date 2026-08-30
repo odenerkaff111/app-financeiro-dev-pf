@@ -92,6 +92,20 @@ export function DebtSummarySection() {
     void loadDebts();
   }, [loadDebts]);
 
+  useEffect(() => {
+    function refreshDebts() {
+      void loadDebts();
+    }
+
+    window.addEventListener("pf:financial-data-changed", refreshDebts);
+    window.addEventListener("storage", refreshDebts);
+
+    return () => {
+      window.removeEventListener("pf:financial-data-changed", refreshDebts);
+      window.removeEventListener("storage", refreshDebts);
+    };
+  }, [loadDebts]);
+
   const summary = useMemo(() => {
     const activePositions = positions.filter(
       (debt) => debt.status !== "paid" && toNumber(debt.projected_balance) > 0.005,
@@ -178,10 +192,6 @@ export function DebtSummarySection() {
         Não foi possível carregar o resumo das dívidas agora.
       </section>
     );
-  }
-
-  if (positions.length === 0) {
-    return null;
   }
 
   return (

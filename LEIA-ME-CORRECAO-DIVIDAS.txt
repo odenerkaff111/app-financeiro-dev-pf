@@ -1,0 +1,13 @@
+Correção 2026-08-27 - vínculo A pagar x Dívidas
+
+Arquivos:
+- src/components/finance/DebtTrackingPanel.tsx
+- src/components/finance/UnifiedFinancialEntryModal.tsx
+- supabase/migrations/022_debt_obligation_linking.sql
+
+Ordem:
+1. Substitua os arquivos pelo ZIP.
+2. Rode todo o SQL 022 no Supabase SQL Editor.
+3. Reinicie o Next.js.
+4. Vá em Dívidas. Se existir lançamento antigo em A pagar/categoria Dívidas sem vínculo, aparecerá um aviso para classificá-lo como Pessoal ou Outras.
+5. Novas dívidas cadastradas por Dívidas > Nova dívida ou Movimentações > categoria Dívidas passam a aparecer nos dois lugares.

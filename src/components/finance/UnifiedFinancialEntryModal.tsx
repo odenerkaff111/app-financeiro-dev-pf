@@ -340,6 +340,18 @@ export function UnifiedFinancialEntryModal({
     return [];
   }, [categories, form.kind]);
 
+  const selectedCategory = useMemo(
+    () => categories.find((category) => category.id === form.categoryId) ?? null,
+    [categories, form.categoryId],
+  );
+
+  const isDebtExpenseCategory =
+    form.kind === "expense" &&
+    selectedCategory?.name
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase() === "dividas";
+
   const sourceAccounts = useMemo(() => {
     if (form.kind === "investment_withdrawal") {
       return accounts.filter((account) => account.type === "investment");
@@ -488,6 +500,40 @@ export function UnifiedFinancialEntryModal({
     }
     if (["income", "expense"].includes(form.kind) && !form.categoryId) {
       throw new Error("Selecione uma categoria.");
+    }
+
+    if (isDebtExpenseCategory) {
+      if (form.status !== "planned") {
+        throw new Error(
+          "Para pagar uma dívida já existente, use Pagamento de dívida. Para cadastrar uma dívida nova, deixe como A pagar.",
+        );
+      }
+
+      if (!form.counterparty.trim()) {
+        throw new Error("Informe para quem você deve.");
+      }
+
+      const debtResult = await supabase.rpc("pf_create_debt_obligation_v1", {
+        target_household_id: household.id,
+        obligation_account_id: form.accountId,
+        debt_creditor: form.counterparty.trim(),
+        debt_description:
+          form.description.trim() || `Dívida com ${form.counterparty.trim()}`,
+        debt_original_amount: amount,
+        target_debt_group: form.debtGroup,
+        debt_start_date: form.date,
+        debt_due_date: form.dueDate || form.date,
+        debt_installment_amount: null,
+        debt_interest_enabled: false,
+        debt_auto_accrue_interest: false,
+        debt_interest_rate: 0,
+        debt_interest_period: "monthly",
+        debt_interest_method: "simple",
+        obligation_notes: form.notes.trim() || null,
+      });
+
+      if (debtResult.error) throw debtResult.error;
+      return;
     }
 
     const paidAt =
@@ -986,13 +1032,43 @@ export function UnifiedFinancialEntryModal({
                             <SelectField
                               label="Categoria"
                               value={form.categoryId}
-                              onChange={(value) => update("categoryId", value)}
+                              onChange={(value) => {
+                                update("categoryId", value);
+                                const category = categories.find((item) => item.id === value);
+                                const normalizedName = category?.name
+                                  .normalize("NFD")
+                                  .replace(/[\u0300-\u036f]/g, "")
+                                  .toLowerCase();
+
+                                if (form.kind === "expense" && normalizedName === "dividas") {
+                                  update("status", "planned");
+                                }
+                              }}
                               options={categoryOptions.map((category) => ({
                                 value: category.id,
                                 label: category.name,
                               }))}
                               emptyLabel="Selecione"
                             />
+
+                            {isDebtExpenseCategory && (
+                              <div className="space-y-3 rounded-xl border border-[#C8A15A]/35 bg-[#C8A15A]/10 px-3 py-3">
+                                <p className="text-xs leading-5 text-[#0D1B2A]/75">
+                                  Este registro será criado nos dois lugares: <strong>A pagar</strong> e <strong>Dívidas</strong>. O vínculo evita duplicidade quando você registrar pagamentos depois.
+                                </p>
+                                <SelectField
+                                  label="Classificação da dívida"
+                                  value={form.debtGroup}
+                                  onChange={(value) =>
+                                    update("debtGroup", value as "personal" | "other")
+                                  }
+                                  options={[
+                                    { value: "personal", label: "Pessoal · amigos ou familiares" },
+                                    { value: "other", label: "Outras · bancos, lojas ou terceiros" },
+                                  ]}
+                                />
+                              </div>
+                            )}
 
                             {!showNewCategory ? (
                               <button
