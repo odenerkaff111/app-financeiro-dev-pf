@@ -5,6 +5,9 @@ import {
   HandCoins,
   Loader2,
   Plus,
+  Pencil,
+  Trash2,
+  AlertTriangle,
   WalletCards,
   X,
 } from "lucide-react";
@@ -49,6 +52,8 @@ type DebtProgress = {
   projected_balance: number | string;
   daily_growth: number | string;
   overdue_days: number;
+  start_date: string | null;
+  due_date: string | null;
 };
 
 type Account = {
@@ -165,6 +170,8 @@ export function DebtTrackingPanel({
   const [error, setError] = useState<string | null>(null);
   const [selectedDebt, setSelectedDebt] = useState<DebtProgress | null>(null);
   const [showNewDebt, setShowNewDebt] = useState(false);
+  const [editingDebt, setEditingDebt] = useState<DebtProgress | null>(null);
+  const [debtToDelete, setDebtToDelete] = useState<DebtProgress | null>(null);
   const [newDebtForm, setNewDebtForm] = useState<NewDebtForm>(emptyNewDebtForm());
   const [paymentForm, setPaymentForm] = useState<PaymentForm>({
     accountId: "",
@@ -218,18 +225,43 @@ export function DebtTrackingPanel({
   }, [loadData]);
 
   useEffect(() => {
-    if (!selectedDebt && !showNewDebt) return;
+    if (!selectedDebt && !showNewDebt && !debtToDelete) return;
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = previous;
     };
-  }, [selectedDebt, showNewDebt]);
+  }, [selectedDebt, showNewDebt, debtToDelete]);
 
   function openNewDebt() {
+    setEditingDebt(null);
     setNewDebtForm({
       ...emptyNewDebtForm(),
       accountId: accounts[0]?.id ?? "",
+    });
+    setError(null);
+    setShowNewDebt(true);
+  }
+
+  function openEditDebt(debt: DebtProgress) {
+    setEditingDebt(debt);
+    setNewDebtForm({
+      creditor: debt.creditor,
+      description: debt.description ?? "",
+      originalAmount: toNumber(debt.original_amount).toFixed(2).replace(".", ","),
+      installmentAmount:
+        toNumber(debt.installment_amount) > 0
+          ? toNumber(debt.installment_amount).toFixed(2).replace(".", ",")
+          : "",
+      accountId: "",
+      startDate: debt.start_date ?? today(),
+      dueDate: debt.due_date ?? today(),
+      interestEnabled: debt.interest_enabled,
+      interestRate: debt.interest_enabled
+        ? Number(debt.interest_rate || 0).toString().replace(".", ",")
+        : "",
+      interestPeriod: debt.interest_period,
+      interestMethod: debt.interest_method,
     });
     setError(null);
     setShowNewDebt(true);
@@ -340,6 +372,104 @@ export function DebtTrackingPanel({
     setShowNewDebt(false);
     await loadData();
 
+    window.localStorage.setItem("pf:financial-data-version", String(Date.now()));
+    window.dispatchEvent(new Event("pf:financial-data-changed"));
+  }
+
+  async function updateDebt(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editingDebt) return;
+
+    if (!canWrite) {
+      setError("Seu acesso é somente leitura.");
+      return;
+    }
+
+    const creditor = newDebtForm.creditor.trim();
+    const originalAmount = parseAmount(newDebtForm.originalAmount);
+    const installmentAmount = newDebtForm.installmentAmount.trim()
+      ? parseAmount(newDebtForm.installmentAmount)
+      : 0;
+    const interestRate = newDebtForm.interestEnabled
+      ? parseAmount(newDebtForm.interestRate || "0")
+      : 0;
+
+    if (!creditor) {
+      setError("Informe para quem você deve.");
+      return;
+    }
+    if (!Number.isFinite(originalAmount) || originalAmount <= 0) {
+      setError("Informe um valor total maior que zero.");
+      return;
+    }
+    if (!Number.isFinite(installmentAmount) || installmentAmount < 0) {
+      setError("Informe uma mensalidade válida.");
+      return;
+    }
+    if (!newDebtForm.dueDate) {
+      setError("Informe o próximo vencimento.");
+      return;
+    }
+    if (newDebtForm.interestEnabled && (!Number.isFinite(interestRate) || interestRate < 0)) {
+      setError("Informe uma taxa de juros válida.");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+
+    const result = await supabase.rpc("pf_update_debt_v1", {
+      target_debt_id: editingDebt.id,
+      debt_creditor: creditor,
+      debt_description: newDebtForm.description.trim(),
+      debt_original_amount: originalAmount,
+      debt_start_date: newDebtForm.startDate,
+      debt_due_date: newDebtForm.dueDate,
+      debt_installment_amount: installmentAmount > 0 ? installmentAmount : null,
+      debt_interest_enabled: newDebtForm.interestEnabled,
+      debt_auto_accrue_interest: newDebtForm.interestEnabled,
+      debt_interest_rate: interestRate,
+      debt_interest_period: newDebtForm.interestPeriod,
+      debt_interest_method: newDebtForm.interestMethod,
+    });
+
+    if (result.error) {
+      setError(result.error.message);
+      setSaving(false);
+      return;
+    }
+
+    setSaving(false);
+    setShowNewDebt(false);
+    setEditingDebt(null);
+    await loadData();
+    window.localStorage.setItem("pf:financial-data-version", String(Date.now()));
+    window.dispatchEvent(new Event("pf:financial-data-changed"));
+  }
+
+  async function deleteDebt() {
+    if (!debtToDelete) return;
+    if (!canWrite) {
+      setError("Seu acesso é somente leitura.");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+
+    const result = await supabase.rpc("pf_delete_debt_v1", {
+      target_debt_id: debtToDelete.id,
+    });
+
+    if (result.error) {
+      setError(result.error.message);
+      setSaving(false);
+      return;
+    }
+
+    setSaving(false);
+    setDebtToDelete(null);
+    await loadData();
     window.localStorage.setItem("pf:financial-data-version", String(Date.now()));
     window.dispatchEvent(new Event("pf:financial-data-changed"));
   }
@@ -573,22 +703,44 @@ export function DebtTrackingPanel({
                     </p>
                   </div>
 
-                  {debt.status !== "paid" ? (
+                  <div className="flex items-center justify-end gap-2">
                     <button
                       type="button"
-                      onClick={() => openPayment(debt)}
-                      disabled={accounts.length === 0}
-                      className="inline-flex h-9 items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-[#0D1B2A] px-3 text-xs font-semibold text-white disabled:opacity-50"
+                      onClick={() => openEditDebt(debt)}
+                      disabled={!canWrite}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[#0D1B2A]/10 bg-white text-[#0D1B2A] hover:bg-[#F7F5EF] disabled:opacity-40"
+                      aria-label={`Editar dívida com ${debt.creditor}`}
+                      title="Editar dívida"
                     >
-                      <WalletCards size={14} />
-                      Registrar pagamento
+                      <Pencil size={14} />
                     </button>
-                  ) : (
-                    <span className="inline-flex h-9 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl bg-emerald-50 px-3 text-xs font-semibold text-emerald-700">
-                      <CheckCircle2 size={14} />
-                      Quitada
-                    </span>
-                  )}
+                    <button
+                      type="button"
+                      onClick={() => { setError(null); setDebtToDelete(debt); }}
+                      disabled={!canWrite}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-red-200 bg-white text-red-700 hover:bg-red-50 disabled:opacity-40"
+                      aria-label={`Excluir dívida com ${debt.creditor}`}
+                      title="Excluir dívida"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                    {debt.status !== "paid" ? (
+                      <button
+                        type="button"
+                        onClick={() => openPayment(debt)}
+                        disabled={accounts.length === 0}
+                        className="inline-flex h-9 items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-[#0D1B2A] px-3 text-xs font-semibold text-white disabled:opacity-50"
+                      >
+                        <WalletCards size={14} />
+                        Registrar pagamento
+                      </button>
+                    ) : (
+                      <span className="inline-flex h-9 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl bg-emerald-50 px-3 text-xs font-semibold text-emerald-700">
+                        <CheckCircle2 size={14} />
+                        Quitada
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <div className="mt-2 flex items-center gap-3">
@@ -630,15 +782,17 @@ export function DebtTrackingPanel({
                     {group === "personal" ? "Dívida pessoal" : "Outra dívida"}
                   </p>
                   <h2 className="mt-2 text-2xl font-semibold text-[#0D1B2A]">
-                    Nova dívida
+                    {editingDebt ? "Editar dívida" : "Nova dívida"}
                   </h2>
                   <p className="mt-1 text-sm text-[#3A3A3C]/60">
-                    Cadastre o saldo que você deve. Pagamentos serão registrados depois, sem duplicar a dívida.
+                    {editingDebt
+                      ? "Altere os dados da dívida. O lançamento vinculado em A pagar será atualizado junto."
+                      : "Cadastre o saldo que você deve. Pagamentos serão registrados depois, sem duplicar a dívida."}
                   </p>
                 </div>
                 <button
                   type="button"
-                  onClick={() => !saving && setShowNewDebt(false)}
+                  onClick={() => { if (!saving) { setShowNewDebt(false); setEditingDebt(null); } }}
                   className="rounded-full p-2 text-[#3A3A3C]/60 hover:bg-white"
                   aria-label="Fechar"
                 >
@@ -646,7 +800,7 @@ export function DebtTrackingPanel({
                 </button>
               </div>
 
-              <form onSubmit={createDebt} className="space-y-4 px-6 py-6">
+              <form onSubmit={editingDebt ? updateDebt : createDebt} className="space-y-4 px-6 py-6">
                 <label className="block space-y-2">
                   <span className="text-sm font-medium">Para quem você deve?</span>
                   <input
@@ -712,6 +866,7 @@ export function DebtTrackingPanel({
                     />
                   </label>
 
+{!editingDebt && (
                   <label className="block space-y-2 sm:col-span-2">
                     <span className="text-sm font-medium">Conta prevista para pagamento</span>
                     <select
@@ -734,6 +889,7 @@ export function DebtTrackingPanel({
                       Define a conta da próxima obrigação exibida em A pagar.
                     </span>
                   </label>
+                  )}
 
                   <label className="block space-y-2">
                     <span className="text-sm font-medium">Data inicial</span>
@@ -857,12 +1013,61 @@ export function DebtTrackingPanel({
                 >
                   {saving ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : editingDebt ? (
+                    <Pencil size={16} />
                   ) : (
                     <Plus size={16} />
                   )}
-                  Cadastrar dívida
+                  {editingDebt ? "Salvar alterações" : "Cadastrar dívida"}
                 </button>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {debtToDelete && (
+        <div className="fixed inset-0 z-[320] flex items-center justify-center bg-[#0D1B2A]/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-3xl border border-red-200 bg-[#F7F5EF] p-6 shadow-2xl">
+            <div className="flex items-start gap-3">
+              <div className="rounded-full bg-red-50 p-2 text-red-700">
+                <AlertTriangle size={20} />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-[#0D1B2A]">Excluir esta dívida?</h2>
+                <p className="mt-2 text-sm leading-6 text-[#3A3A3C]/65">
+                  <strong>{debtToDelete.creditor}</strong> será removida do acompanhamento e o lançamento em A pagar criado junto com ela também será excluído.
+                </p>
+                <p className="mt-2 text-xs leading-5 text-[#3A3A3C]/50">
+                  Por segurança, o sistema bloqueia a exclusão se já houver pagamentos ou outros movimentos financeiros reais.
+                </p>
+              </div>
+            </div>
+
+            {error && (
+              <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {error}
+              </p>
+            )}
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => { if (!saving) { setDebtToDelete(null); setError(null); } }}
+                disabled={saving}
+                className="h-10 rounded-xl border border-[#0D1B2A]/10 bg-white px-4 text-sm font-semibold text-[#0D1B2A] disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => void deleteDebt()}
+                disabled={saving}
+                className="inline-flex h-10 items-center gap-2 rounded-xl bg-red-700 px-4 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 size={15} />}
+                Excluir dívida
+              </button>
             </div>
           </div>
         </div>

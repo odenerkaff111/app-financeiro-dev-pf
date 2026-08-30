@@ -1,0 +1,14 @@
+CORRECAO - EDITAR E EXCLUIR DIVIDAS
+
+Arquivos:
+- src/components/finance/DebtTrackingPanel.tsx
+- supabase/migrations/024_manage_debt_edit_delete.sql
+
+O que muda:
+1. A movimentacao vinculada continua bloqueada para edicao/exclusao isolada.
+2. A tela Dividas passa a ter botoes Editar e Excluir.
+3. Editar atualiza a divida e a obrigacao A pagar vinculada.
+4. Excluir remove a divida e o A pagar criado junto, desde que nao haja pagamentos/historico financeiro.
+5. Se uma despesa antiga foi apenas promovida a divida, excluir a divida preserva a despesa A pagar e remove apenas o vinculo.
+
+A migration 024 e ASCII-only para evitar o problema de encoding visto anteriormente no PowerShell.
