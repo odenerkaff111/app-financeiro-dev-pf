@@ -47,6 +47,7 @@ type PeriodFilter =
   | "today"
   | "week"
   | "month"
+  | "custom"
   | "all";
 
 type AccountType =
@@ -204,6 +205,8 @@ export default function DashboardPage() {
 
   const [periodFilter, setPeriodFilter] =
     useState<PeriodFilter>("month");
+  const [customStart, setCustomStart] = useState(getToday());
+  const [customEnd, setCustomEnd] = useState(getToday());
 
   const [loading, setLoading] =
     useState(true);
@@ -373,6 +376,14 @@ export default function DashboardPage() {
             );
           }
 
+          if (periodFilter === "custom") {
+            if (!customStart || !customEnd || customStart > customEnd) {
+              return false;
+            }
+
+            return referenceDate >= customStart && referenceDate <= customEnd;
+          }
+
           return isSameMonth(
             date,
             now,
@@ -385,6 +396,8 @@ export default function DashboardPage() {
   }, [
     transactions,
     periodFilter,
+    customStart,
+    customEnd,
   ]);
 
   const metrics = useMemo(() => {
@@ -480,8 +493,9 @@ export default function DashboardPage() {
         }
 
         if (
-          effectiveStatus ===
-          "overdue"
+          effectiveStatus === "overdue" &&
+          (transaction.type === "expense" ||
+            transaction.type === "debt_payment")
         ) {
           overdue += amount;
         }
@@ -710,6 +724,10 @@ export default function DashboardPage() {
       label: "Este mês",
     },
     {
+      value: "custom",
+      label: "Personalizado",
+    },
+    {
       value: "all",
       label: "Todo período",
     },
@@ -746,6 +764,10 @@ export default function DashboardPage() {
             periods={periods}
             value={periodFilter}
             onChange={setPeriodFilter}
+            customStart={customStart}
+            customEnd={customEnd}
+            onCustomStartChange={setCustomStart}
+            onCustomEndChange={setCustomEnd}
           />
         </div>
 
@@ -799,6 +821,8 @@ export default function DashboardPage() {
         <SpendingCategoryChart
           categoryData={categoryChartData}
           periodFilter={periodFilter}
+          customStart={customStart}
+          customEnd={customEnd}
         />
       </section>
 
@@ -816,32 +840,82 @@ function PeriodFilterControl({
   periods,
   value,
   onChange,
+  customStart,
+  customEnd,
+  onCustomStartChange,
+  onCustomEndChange,
 }: {
   periods: PeriodOption[];
   value: PeriodFilter;
   onChange: (value: PeriodFilter) => void;
+  customStart: string;
+  customEnd: string;
+  onCustomStartChange: (value: string) => void;
+  onCustomEndChange: (value: string) => void;
 }) {
-  return (
-    <div className="flex max-w-full items-center gap-1 overflow-x-auto rounded-xl border border-[#0D1B2A]/10 bg-[#F7F5EF] p-1">
-      {periods.map((period) => {
-        const active = value === period.value;
+  const invalidCustomRange =
+    value === "custom" &&
+    Boolean(customStart) &&
+    Boolean(customEnd) &&
+    customStart > customEnd;
 
-        return (
-          <button
-            key={period.value}
-            type="button"
-            onClick={() => onChange(period.value)}
-            className={[
-              "shrink-0 rounded-lg px-3 py-2 text-xs font-semibold transition sm:px-3.5",
-              active
-                ? "bg-[#0D1B2A] text-white shadow-sm"
-                : "text-[#3A3A3C]/60 hover:bg-white hover:text-[#0D1B2A]",
-            ].join(" ")}
-          >
-            {period.label}
-          </button>
-        );
-      })}
+  return (
+    <div className="space-y-2">
+      <div className="flex max-w-full items-center gap-1 overflow-x-auto rounded-xl border border-[#0D1B2A]/10 bg-[#F7F5EF] p-1">
+        {periods.map((period) => {
+          const active = value === period.value;
+
+          return (
+            <button
+              key={period.value}
+              type="button"
+              onClick={() => onChange(period.value)}
+              className={[
+                "shrink-0 rounded-lg px-3 py-2 text-xs font-semibold transition sm:px-3.5",
+                active
+                  ? "bg-[#0D1B2A] text-white shadow-sm"
+                  : "text-[#3A3A3C]/60 hover:bg-white hover:text-[#0D1B2A]",
+              ].join(" ")}
+            >
+              {period.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {value === "custom" && (
+        <div className="rounded-xl border border-[#0D1B2A]/10 bg-white p-3">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <label className="space-y-1">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-[#3A3A3C]/55">
+                De
+              </span>
+              <input
+                type="date"
+                value={customStart}
+                onChange={(event) => onCustomStartChange(event.target.value)}
+                className="h-10 w-full rounded-lg border border-[#0D1B2A]/12 bg-white px-3 text-xs text-[#0D1B2A] outline-none focus:border-[#C8A15A]"
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-[#3A3A3C]/55">
+                Até
+              </span>
+              <input
+                type="date"
+                value={customEnd}
+                onChange={(event) => onCustomEndChange(event.target.value)}
+                className="h-10 w-full rounded-lg border border-[#0D1B2A]/12 bg-white px-3 text-xs text-[#0D1B2A] outline-none focus:border-[#C8A15A]"
+              />
+            </label>
+          </div>
+          {invalidCustomRange && (
+            <p className="mt-2 text-xs text-red-600">
+              A data inicial precisa ser anterior ou igual à data final.
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

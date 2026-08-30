@@ -18,6 +18,7 @@ import {
   useState,
 } from "react";
 import {
+  differenceInCalendarDays,
   isSameDay,
   isSameMonth,
   isSameWeek,
@@ -30,6 +31,7 @@ type PeriodFilter =
   | "today"
   | "week"
   | "month"
+  | "custom"
   | "all";
 
 type CategoryData = {
@@ -51,6 +53,8 @@ type PayableCommitment = {
 type SpendingCategoryChartProps = {
   categoryData: CategoryData[];
   periodFilter: PeriodFilter;
+  customStart?: string;
+  customEnd?: string;
 };
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -68,6 +72,7 @@ const PERIOD_LABELS: Record<PeriodFilter, string> = {
   today: "hoje",
   week: "nesta semana",
   month: "neste mês",
+  custom: "no período personalizado",
   all: "em todo o período",
 };
 
@@ -151,6 +156,8 @@ function normalizeCategoryName(categoryName: string) {
 function isDateInPeriod(
   value: string | null,
   periodFilter: PeriodFilter,
+  customStart?: string,
+  customEnd?: string,
 ) {
   if (periodFilter === "all") {
     return true;
@@ -174,6 +181,14 @@ function isDateInPeriod(
       });
     }
 
+    if (periodFilter === "custom") {
+      if (!customStart || !customEnd || customStart > customEnd) {
+        return false;
+      }
+
+      return value >= customStart && value <= customEnd;
+    }
+
     return isSameMonth(date, today);
   } catch {
     return false;
@@ -183,6 +198,8 @@ function isDateInPeriod(
 function expectedDebtCommitment(
   monthlyAmount: number,
   periodFilter: PeriodFilter,
+  customStart?: string,
+  customEnd?: string,
 ) {
   if (monthlyAmount <= 0) {
     return 0;
@@ -203,12 +220,28 @@ function expectedDebtCommitment(
     return monthlyAmount * (7 / daysInMonth);
   }
 
+  if (periodFilter === "custom") {
+    if (!customStart || !customEnd || customStart > customEnd) {
+      return 0;
+    }
+
+    try {
+      const days =
+        differenceInCalendarDays(parseISO(customEnd), parseISO(customStart)) + 1;
+      return monthlyAmount * (Math.max(days, 1) / 30);
+    } catch {
+      return 0;
+    }
+  }
+
   return monthlyAmount;
 }
 
 export function SpendingCategoryChart({
   categoryData,
   periodFilter,
+  customStart,
+  customEnd,
 }: SpendingCategoryChartProps) {
   const { household } = useHousehold();
   const [debts, setDebts] = useState<DebtCommitment[]>([]);
@@ -274,6 +307,8 @@ export function SpendingCategoryChart({
     const debtAmount = expectedDebtCommitment(
       monthlyDebtAmount,
       periodFilter,
+      customStart,
+      customEnd,
     );
 
     if (debtAmount > 0) {
@@ -288,7 +323,12 @@ export function SpendingCategoryChart({
         (commitment) =>
           commitment.computed_status !== "settled" &&
           commitment.computed_status !== "cancelled" &&
-          isDateInPeriod(commitment.due_date, periodFilter),
+          isDateInPeriod(
+            commitment.due_date,
+            periodFilter,
+            customStart,
+            customEnd,
+          ),
       )
       .reduce(
         (sum, commitment) =>
@@ -304,7 +344,14 @@ export function SpendingCategoryChart({
       .map(([name, value]) => ({ name, value }))
       .filter((item) => item.value > 0)
       .sort((first, second) => second.value - first.value);
-  }, [categoryData, commitments, debts, periodFilter]);
+  }, [
+    categoryData,
+    commitments,
+    debts,
+    periodFilter,
+    customStart,
+    customEnd,
+  ]);
 
   if (loading) {
     return (

@@ -425,8 +425,10 @@ export default function TransactionsPage() {
   const [search, setSearch] = useState("");
 
   const [periodFilter, setPeriodFilter] = useState<
-    "month" | "year" | "all"
+    "month" | "year" | "custom" | "all"
   >("month");
+  const [customStart, setCustomStart] = useState(getToday());
+  const [customEnd, setCustomEnd] = useState(getToday());
 
   const [typeFilter, setTypeFilter] = useState<
     "all" | TransactionType
@@ -641,9 +643,11 @@ export default function TransactionsPage() {
       }
 
       try {
-        const transactionDate = parseISO(
-          transaction.occurred_on,
-        );
+        const referenceDate =
+          effectiveStatus === "planned" || effectiveStatus === "overdue"
+            ? transaction.due_date ?? transaction.occurred_on
+            : transaction.occurred_on;
+        const transactionDate = parseISO(referenceDate);
 
         if (periodFilter === "month") {
           return isSameMonth(
@@ -657,6 +661,14 @@ export default function TransactionsPage() {
             transactionDate,
             today,
           );
+        }
+
+        if (periodFilter === "custom") {
+          if (!customStart || !customEnd || customStart > customEnd) {
+            return false;
+          }
+
+          return referenceDate >= customStart && referenceDate <= customEnd;
         }
       } catch {
         return true;
@@ -672,6 +684,8 @@ export default function TransactionsPage() {
     typeFilter,
     statusFilter,
     periodFilter,
+    customStart,
+    customEnd,
   ]);
 
   const activeAccounts = useMemo(
@@ -1254,6 +1268,7 @@ export default function TransactionsPage() {
               event.target.value as
                 | "month"
                 | "year"
+                | "custom"
                 | "all",
             )
           }
@@ -1265,6 +1280,10 @@ export default function TransactionsPage() {
 
           <option value="year">
             Este ano
+          </option>
+
+          <option value="custom">
+            Personalizado
           </option>
 
           <option value="all">
@@ -1330,6 +1349,34 @@ export default function TransactionsPage() {
             Cancelados
           </option>
         </select>
+
+        {periodFilter === "custom" && (
+          <div className="grid grid-cols-1 gap-3 rounded-xl border border-[#0D1B2A]/10 bg-[#F7F5EF] p-3 md:col-span-4 sm:grid-cols-2">
+            <label className="space-y-1">
+              <span className="text-xs font-medium text-[#0D1B2A]/65">De</span>
+              <input
+                type="date"
+                value={customStart}
+                onChange={(event) => setCustomStart(event.target.value)}
+                className="h-10 w-full rounded-lg border border-[#0D1B2A]/12 bg-white px-3 text-sm text-[#0D1B2A] outline-none focus:border-[#C8A15A]"
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="text-xs font-medium text-[#0D1B2A]/65">Até</span>
+              <input
+                type="date"
+                value={customEnd}
+                onChange={(event) => setCustomEnd(event.target.value)}
+                className="h-10 w-full rounded-lg border border-[#0D1B2A]/12 bg-white px-3 text-sm text-[#0D1B2A] outline-none focus:border-[#C8A15A]"
+              />
+            </label>
+            {customStart && customEnd && customStart > customEnd && (
+              <p className="text-xs text-red-600 sm:col-span-2">
+                A data inicial precisa ser anterior ou igual à data final.
+              </p>
+            )}
+          </div>
+        )}
       </section>
 
       {loading ? (

@@ -1,12 +1,19 @@
-AJUSTE - METADADOS DE PAGAMENTO DE DIVIDA
+AJUSTE RECEBIMENTOS + FILTRO PERSONALIZADO
 
-O que corrige:
-- Descricao: "Pagamento de divida"
-- Segunda linha/contraparte: nome real do credor (ex.: VANDA)
-- Categoria: "Dividas"
-- Tipo exibido na tela de Movimentacoes: "Saida"
-- Pagamentos antigos do tipo debt_payment tambem sao normalizados pela migration.
+Sem migration SQL.
 
-Importante:
-- O tipo interno no banco continua debt_payment. Isso e intencional para preservar os calculos do motor financeiro.
-- Execute a migration 021 no SQL Editor do Supabase depois de extrair o ZIP.
+Alteracoes:
+- Receita/Salario com status A receber usa uma unica data: "Data prevista do recebimento".
+- Receita ja recebida usa "Data do recebimento".
+- Remove o campo Vencimento redundante para receitas.
+- Conta muda para "Conta prevista para receber" quando o recebimento ainda nao ocorreu.
+- Dashboard: adiciona filtro Personalizado (data inicial e final).
+- Movimentacoes: adiciona filtro Personalizado (data inicial e final).
+- Movimentacoes planejadas sao filtradas pela data prevista/vencimento.
+- O card A receber passa a exibir receitas planejadas quando a data delas estiver dentro do periodo selecionado.
+- Atrasos de recebimentos nao entram no detalhe "A pagar em atraso".
+- Grafico Gastos e compromissos respeita o periodo personalizado.
+
+Exemplo atual:
+Recebimento previsto para 04/09/2026 nao aparece em "Este mes" se o mes atual for agosto.
+Selecione Personalizado de 01/09/2026 a 30/09/2026 (ou Todo periodo) para visualizar o valor em A receber e Movimentacoes.

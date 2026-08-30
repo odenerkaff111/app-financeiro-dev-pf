@@ -541,6 +541,9 @@ export function UnifiedFinancialEntryModal({
         ? new Date(`${form.date}T12:00:00-03:00`).toISOString()
         : null;
 
+    const effectiveDueDate =
+      form.kind === "income" ? form.date : form.dueDate || form.date;
+
     const result = await supabase.from("pf_transactions").insert({
       household_id: household.id,
       account_id: form.accountId,
@@ -557,7 +560,7 @@ export function UnifiedFinancialEntryModal({
       amount,
       original_amount: amount,
       occurred_on: form.date,
-      due_date: form.dueDate || form.date,
+      due_date: effectiveDueDate,
       paid_at: paidAt,
       source: "manual",
       notes: form.notes.trim() || null,
@@ -1001,7 +1004,9 @@ export function UnifiedFinancialEntryModal({
                         <AccountSelect
                           label={
                             form.kind === "income"
-                              ? "Conta que recebeu"
+                              ? form.status === "planned"
+                                ? "Conta prevista para receber"
+                                : "Conta que recebeu"
                               : form.kind === "investment_withdrawal"
                                 ? "Investimento de origem"
                                 : "Conta de origem ou pagamento"
@@ -1125,15 +1130,23 @@ export function UnifiedFinancialEntryModal({
                           </div>
                         )}
                         <DateField
-                          label="Data"
+                          label={
+                            form.kind === "income"
+                              ? form.status === "planned"
+                                ? "Data prevista do recebimento"
+                                : "Data do recebimento"
+                              : "Data"
+                          }
                           value={form.date}
                           onChange={(value) => update("date", value)}
                         />
-                        <DateField
-                          label="Vencimento"
-                          value={form.dueDate}
-                          onChange={(value) => update("dueDate", value)}
-                        />
+                        {form.kind !== "income" && (
+                          <DateField
+                            label="Vencimento"
+                            value={form.dueDate}
+                            onChange={(value) => update("dueDate", value)}
+                          />
+                        )}
                       </div>
 
                       {form.kind === "expense" && (
