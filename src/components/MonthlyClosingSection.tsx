@@ -9,6 +9,7 @@ type PeriodFilter =
   | "today"
   | "week"
   | "month"
+  | "next_month"
   | "custom"
   | "all";
 
@@ -40,6 +41,10 @@ const PERIOD_TITLES: Record<PeriodFilter, { positive: string; negative: string }
   month: {
     positive: "Seu mês fecha positivo",
     negative: "Seu mês fecha no vermelho",
+  },
+  next_month: {
+    positive: "Seu próximo mês fecha positivo",
+    negative: "Seu próximo mês fecha no vermelho",
   },
   custom: {
     positive: "Seu período fecha positivo",

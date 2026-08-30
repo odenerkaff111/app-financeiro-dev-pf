@@ -1,21 +1,16 @@
-AJUSTE - PLANEJAMENTO, PROJECAO, VALOR EFETIVO E GRAFICO
+AJUSTE 027 - PLANEJAMENTO, DATAS, PROXIMO MES E CONTA OPCIONAL
 
-1. Criar categoria nao fecha mais o modal de novo registro.
-2. Projecao do periodo usa entradas realizadas + a receber - saidas realizadas - a pagar - reservas de planejamentos.
-3. Novo painel Planejamento mensal no Dashboard.
-   - Exemplo: Aniversario da minha filha = R$ 500.
-   - Exemplo: Contabilidade = R$ 2.350.
-   - O nome do planejamento vira/usa uma categoria de despesa.
-   - Cada compra nessa categoria reduz o valor ainda reservado.
-4. Conta prevista pode ser paga/recebida por valor diferente do previsto.
-   - Exemplo: previsto R$ 65, efetivo R$ 60 ou R$ 72.
-   - Para movimentacoes simples, a conta bancaria e opcional.
-5. Grafico Gastos e compromissos usa o nome real das categorias.
-   - Nao agrupa Outros ou categorias personalizadas como Despesa.
-   - Categorias exibidas recebem cores distintas.
+1. Corrige o trigger antigo que rejeitava account_id nulo apesar da conta ser opcional.
+2. Adiciona filtro Proximo mes no Dashboard e em Movimentacoes.
+3. Gera recorrencias do mes atual e do proximo mes ao carregar as telas.
+4. Planejamento mensal passa a ter Mes do planejamento explicito.
+5. Planejamento exibe Planejado, Usado/comprometido e Economia/Excesso.
+6. Planejamento nao entra sozinho no grafico de pizza; somente gastos/compromissos reais da categoria entram.
+7. Novo registro planejado usa Vencimento/Data prevista; a data real da movimentacao so existe quando pago/recebido.
+8. Movimentacoes passa a separar as colunas Movimentacao e Vencimento.
 
-APLICACAO
-- Copie os arquivos deste ZIP sobre a raiz do projeto.
-- Rode a migration 026 inteira no SQL Editor do Supabase.
-- Limpe .next e execute npm run dev.
-- TypeScript validado com: npx tsc --noEmit
+APLICAR SQL:
+supabase/migrations/027_optional_account_validator_and_period_semantics.sql
+
+VALIDACAO EXECUTADA:
+npx tsc --noEmit

@@ -6,6 +6,7 @@ import {
   Loader2,
   Plus,
   Pencil,
+  RefreshCw,
   Trash2,
   AlertTriangle,
   WalletCards,
@@ -40,6 +41,7 @@ type DebtProgress = {
   remaining_installments: number | null;
   status: string;
   paid_amount: number | string;
+  discount_amount: number | string;
   progress_percentage: number | string;
   debt_group: DebtGroup;
   interest_enabled: boolean;
@@ -103,6 +105,15 @@ type NewDebtForm = {
   interestRate: string;
   interestPeriod: "daily" | "monthly" | "yearly";
   interestMethod: "simple" | "compound";
+};
+
+type DebtAdjustmentForm = {
+  newBalance: string;
+  date: string;
+  dueDate: string;
+  notes: string;
+  freezeInterest: boolean;
+  fullPayoff: boolean;
 };
 
 function today() {
@@ -172,6 +183,7 @@ export function DebtTrackingPanel({
   const [showNewDebt, setShowNewDebt] = useState(false);
   const [editingDebt, setEditingDebt] = useState<DebtProgress | null>(null);
   const [debtToDelete, setDebtToDelete] = useState<DebtProgress | null>(null);
+  const [debtToAdjust, setDebtToAdjust] = useState<DebtProgress | null>(null);
   const [newDebtForm, setNewDebtForm] = useState<NewDebtForm>(emptyNewDebtForm());
   const [paymentForm, setPaymentForm] = useState<PaymentForm>({
     accountId: "",
@@ -179,6 +191,14 @@ export function DebtTrackingPanel({
     date: today(),
     countInstallment: false,
     notes: "",
+  });
+  const [adjustmentForm, setAdjustmentForm] = useState<DebtAdjustmentForm>({
+    newBalance: "",
+    date: today(),
+    dueDate: today(),
+    notes: "",
+    freezeInterest: true,
+    fullPayoff: true,
   });
 
   const loadData = useCallback(async () => {
@@ -225,13 +245,13 @@ export function DebtTrackingPanel({
   }, [loadData]);
 
   useEffect(() => {
-    if (!selectedDebt && !showNewDebt && !debtToDelete) return;
+    if (!selectedDebt && !showNewDebt && !debtToDelete && !debtToAdjust) return;
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = previous;
     };
-  }, [selectedDebt, showNewDebt, debtToDelete]);
+  }, [selectedDebt, showNewDebt, debtToDelete, debtToAdjust]);
 
   function openNewDebt() {
     setEditingDebt(null);
@@ -474,6 +494,61 @@ export function DebtTrackingPanel({
     window.dispatchEvent(new Event("pf:financial-data-changed"));
   }
 
+  function openDebtAdjustment(debt: DebtProgress) {
+    setDebtToAdjust(debt);
+    setAdjustmentForm({
+      newBalance: toNumber(debt.projected_balance).toFixed(2).replace(".", ","),
+      date: today(),
+      dueDate: debt.due_date ?? today(),
+      notes: "",
+      freezeInterest: true,
+      fullPayoff: true,
+    });
+    setError(null);
+  }
+
+  async function adjustDebtBalance(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!debtToAdjust) return;
+
+    if (!canWrite) {
+      setError("Seu acesso é somente leitura.");
+      return;
+    }
+
+    const newBalance = parseAmount(adjustmentForm.newBalance);
+
+    if (!Number.isFinite(newBalance) || newBalance <= 0) {
+      setError("Informe um novo saldo maior que zero.");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+
+    const result = await supabase.rpc("pf_adjust_other_debt_balance_v1", {
+      target_debt_id: debtToAdjust.id,
+      target_balance: newBalance,
+      adjustment_date: adjustmentForm.date,
+      adjustment_due_date: adjustmentForm.dueDate || null,
+      adjustment_notes: adjustmentForm.notes.trim() || null,
+      freeze_interest: adjustmentForm.freezeInterest,
+      settlement_is_full_payoff: adjustmentForm.fullPayoff,
+    });
+
+    if (result.error) {
+      setError(result.error.message);
+      setSaving(false);
+      return;
+    }
+
+    setSaving(false);
+    setDebtToAdjust(null);
+    await loadData();
+    window.localStorage.setItem("pf:financial-data-version", String(Date.now()));
+    window.dispatchEvent(new Event("pf:financial-data-changed"));
+  }
+
   function openPayment(debt: DebtProgress) {
     const installment = toNumber(debt.installment_amount);
     const balance = toNumber(debt.projected_balance);
@@ -662,8 +737,13 @@ export function DebtTrackingPanel({
 
                   <div className="grid grid-cols-2 gap-x-5 gap-y-2 sm:grid-cols-4">
                     <CompactMetric
-                      label="Valor total"
+                      label="Valor original"
                       value={formatCurrency(debt.original_amount)}
+                      detail={
+                        toNumber(debt.discount_amount) > 0
+                          ? `Acordos/descontos: -${formatCurrency(debt.discount_amount)}`
+                          : undefined
+                      }
                     />
                     <CompactMetric
                       label="Já pago"
@@ -703,7 +783,7 @@ export function DebtTrackingPanel({
                     </p>
                   </div>
 
-                  <div className="flex items-center justify-end gap-2">
+                  <div className="flex flex-wrap items-center justify-end gap-2">
                     <button
                       type="button"
                       onClick={() => openEditDebt(debt)}
@@ -714,6 +794,18 @@ export function DebtTrackingPanel({
                     >
                       <Pencil size={14} />
                     </button>
+                    {group === "other" && debt.status !== "paid" && (
+                      <button
+                        type="button"
+                        onClick={() => openDebtAdjustment(debt)}
+                        disabled={!canWrite}
+                        className="inline-flex h-9 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-[#C8A15A]/35 bg-[#FFF9EC] px-3 text-xs font-semibold text-[#7A5A20] hover:bg-[#F8EED8] disabled:opacity-40"
+                        title="Registrar acordo ou atualizar o saldo"
+                      >
+                        <RefreshCw size={14} />
+                        Atualizar saldo
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => { setError(null); setDebtToDelete(debt); }}
@@ -1019,6 +1111,145 @@ export function DebtTrackingPanel({
                     <Plus size={16} />
                   )}
                   {editingDebt ? "Salvar alterações" : "Cadastrar dívida"}
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {debtToAdjust && (
+        <div className="fixed inset-0 z-[315] overflow-y-auto bg-[#0D1B2A]/60 backdrop-blur-sm">
+          <div className="flex min-h-full items-center justify-center p-4 py-24">
+            <div className="w-full max-w-xl rounded-3xl border border-[#C8A15A]/25 bg-[#F7F5EF] shadow-2xl">
+              <div className="flex items-start justify-between border-b border-[#0D1B2A]/10 px-6 py-5">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#C8A15A]">
+                    Acordo / atualização
+                  </p>
+                  <h2 className="mt-2 text-2xl font-semibold text-[#0D1B2A]">
+                    {debtToAdjust.creditor}
+                  </h2>
+                  <p className="mt-1 text-sm text-[#3A3A3C]/60">
+                    Saldo atual: {formatCurrency(debtToAdjust.projected_balance)}. O valor original da dívida será preservado.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => !saving && setDebtToAdjust(null)}
+                  className="rounded-full p-2 text-[#3A3A3C]/60 hover:bg-white"
+                  aria-label="Fechar"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <form onSubmit={adjustDebtBalance} className="space-y-4 px-6 py-6">
+                <label className="block space-y-2">
+                  <span className="text-sm font-medium">Novo saldo / valor do acordo</span>
+                  <input
+                    required
+                    inputMode="decimal"
+                    value={adjustmentForm.newBalance}
+                    onChange={(event) =>
+                      setAdjustmentForm((current) => ({
+                        ...current,
+                        newBalance: event.target.value,
+                      }))
+                    }
+                    className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-4 text-sm outline-none"
+                  />
+                  <p className="text-xs text-[#3A3A3C]/50">
+                    Se cair, a diferença vira desconto/acordo no histórico. Se subir, vira ajuste de saldo.
+                  </p>
+                </label>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <label className="block space-y-2">
+                    <span className="text-sm font-medium">Data do acordo/consulta</span>
+                    <input
+                      required
+                      type="date"
+                      value={adjustmentForm.date}
+                      onChange={(event) =>
+                        setAdjustmentForm((current) => ({ ...current, date: event.target.value }))
+                      }
+                      className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-4 text-sm outline-none"
+                    />
+                  </label>
+
+                  <label className="block space-y-2">
+                    <span className="text-sm font-medium">Vencimento da oferta</span>
+                    <input
+                      type="date"
+                      value={adjustmentForm.dueDate}
+                      onChange={(event) =>
+                        setAdjustmentForm((current) => ({ ...current, dueDate: event.target.value }))
+                      }
+                      className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-4 text-sm outline-none"
+                    />
+                  </label>
+                </div>
+
+                <label className="flex items-start gap-3 rounded-xl border border-[#0D1B2A]/10 bg-white p-4">
+                  <input
+                    type="checkbox"
+                    checked={adjustmentForm.fullPayoff}
+                    onChange={(event) =>
+                      setAdjustmentForm((current) => ({ ...current, fullPayoff: event.target.checked }))
+                    }
+                    className="mt-0.5 h-5 w-5 accent-[#0D1B2A]"
+                  />
+                  <div>
+                    <p className="text-sm font-medium">Este valor é para quitar a dívida</p>
+                    <p className="mt-0.5 text-xs text-[#3A3A3C]/50">
+                      O valor inteiro do acordo aparecerá em A pagar. Desmarque se for apenas atualização do saldo e quiser manter a mensalidade atual.
+                    </p>
+                  </div>
+                </label>
+
+                <label className="flex items-start gap-3 rounded-xl border border-[#0D1B2A]/10 bg-white p-4">
+                  <input
+                    type="checkbox"
+                    checked={adjustmentForm.freezeInterest}
+                    onChange={(event) =>
+                      setAdjustmentForm((current) => ({ ...current, freezeInterest: event.target.checked }))
+                    }
+                    className="mt-0.5 h-5 w-5 accent-[#0D1B2A]"
+                  />
+                  <div>
+                    <p className="text-sm font-medium">Parar juros automáticos a partir do acordo</p>
+                    <p className="mt-0.5 text-xs text-[#3A3A3C]/50">
+                      Recomendado quando a empresa informou um valor fechado de quitação.
+                    </p>
+                  </div>
+                </label>
+
+                <label className="block space-y-2">
+                  <span className="text-sm font-medium">Observação</span>
+                  <textarea
+                    value={adjustmentForm.notes}
+                    onChange={(event) =>
+                      setAdjustmentForm((current) => ({ ...current, notes: event.target.value }))
+                    }
+                    placeholder="Ex.: oferta de quitação pelo aplicativo da instituição"
+                    className="min-h-24 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-4 py-3 text-sm outline-none"
+                  />
+                </label>
+
+                {error && (
+                  <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {error}
+                  </p>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#0D1B2A] text-sm font-semibold text-white disabled:opacity-60"
+                >
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw size={16} />}
+                  Salvar novo saldo
                 </button>
               </form>
             </div>

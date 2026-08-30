@@ -64,6 +64,15 @@ function monthKey(value: string) {
   return value.slice(0, 7);
 }
 
+function formatMonth(value: string) {
+  if (!/^\d{4}-\d{2}$/.test(value)) return value;
+  const [year, month] = value.split("-").map(Number);
+  return new Intl.DateTimeFormat("pt-BR", {
+    month: "long",
+    year: "numeric",
+  }).format(new Date(year, month - 1, 1));
+}
+
 function notifyFinancialDataChanged() {
   const version = String(Date.now());
   window.localStorage.setItem("pf:financial-data-version", version);
@@ -88,12 +97,14 @@ export function BudgetPlanningPanel({
   const [showForm, setShowForm] = useState(false);
   const [planName, setPlanName] = useState("");
   const [planAmount, setPlanAmount] = useState("");
+  const [planMonth, setPlanMonth] = useState(defaultMonth);
   const [editingBudgetId, setEditingBudgetId] = useState<string | null>(null);
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
 
   useEffect(() => {
     if (/^\d{4}-\d{2}$/.test(defaultMonth)) {
       setMonth(defaultMonth);
+      setPlanMonth(defaultMonth);
     }
   }, [defaultMonth]);
 
@@ -179,10 +190,24 @@ export function BudgetPlanningPanel({
       .sort((first, second) => first.name.localeCompare(second.name, "pt-BR"));
   }, [budgets, categories, transactions, month]);
 
+  const summary = useMemo(() => {
+    const planned = rows.reduce((total, row) => total + row.planned, 0);
+    const committed = rows.reduce((total, row) => total + row.committed, 0);
+    const difference = planned - committed;
+
+    return {
+      planned,
+      committed,
+      difference,
+      exceeded: difference < 0,
+    };
+  }, [rows]);
+
   function resetForm() {
     setShowForm(false);
     setPlanName("");
     setPlanAmount("");
+    setPlanMonth(month);
     setEditingBudgetId(null);
     setEditingCategoryId(null);
     setError(null);
@@ -191,6 +216,7 @@ export function BudgetPlanningPanel({
   function startNewPlan() {
     setPlanName("");
     setPlanAmount("");
+    setPlanMonth(month);
     setEditingBudgetId(null);
     setEditingCategoryId(null);
     setShowForm(true);
@@ -200,6 +226,7 @@ export function BudgetPlanningPanel({
   function startEdit(row: (typeof rows)[number]) {
     setPlanName(row.name);
     setPlanAmount(row.planned.toFixed(2).replace(".", ","));
+    setPlanMonth(row.month.slice(0, 7));
     setEditingBudgetId(row.id);
     setEditingCategoryId(row.category_id);
     setShowForm(true);
@@ -224,6 +251,11 @@ export function BudgetPlanningPanel({
 
     if (!Number.isFinite(amount) || amount <= 0) {
       setError("Informe um valor planejado maior que zero.");
+      return;
+    }
+
+    if (!/^\d{4}-\d{2}$/.test(planMonth)) {
+      setError("Selecione o mês do planejamento.");
       return;
     }
 
@@ -264,7 +296,11 @@ export function BudgetPlanningPanel({
       if (editingBudgetId) {
         const updateResult = await supabase
           .from("pf_budgets")
-          .update({ amount, updated_at: new Date().toISOString() })
+          .update({
+            amount,
+            month: `${planMonth}-01`,
+            updated_at: new Date().toISOString(),
+          })
           .eq("id", editingBudgetId)
           .eq("household_id", household.id);
 
@@ -274,7 +310,7 @@ export function BudgetPlanningPanel({
           {
             household_id: household.id,
             category_id: categoryId,
-            month: `${month}-01`,
+            month: `${planMonth}-01`,
             amount,
             updated_at: new Date().toISOString(),
           },
@@ -284,6 +320,7 @@ export function BudgetPlanningPanel({
         if (budgetResult.error) throw budgetResult.error;
       }
 
+      setMonth(planMonth);
       resetForm();
       notifyFinancialDataChanged();
       await loadData();
@@ -373,7 +410,7 @@ export function BudgetPlanningPanel({
           onSubmit={savePlan}
           className="mt-5 rounded-xl border border-[#C8A15A]/25 bg-[#F7F5EF] p-4"
         >
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_220px_auto] sm:items-end">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_200px_190px_auto] lg:items-end">
             <label className="space-y-1.5">
               <span className="text-xs font-semibold text-[#0D1B2A]">
                 Nome do planejamento
@@ -397,6 +434,17 @@ export function BudgetPlanningPanel({
                 value={planAmount}
                 onChange={(event) => setPlanAmount(event.target.value)}
                 placeholder="0,00"
+                className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-3 text-sm outline-none focus:border-[#C8A15A]"
+              />
+            </label>
+            <label className="space-y-1.5">
+              <span className="text-xs font-semibold text-[#0D1B2A]">
+                Mês do planejamento
+              </span>
+              <input
+                type="month"
+                value={planMonth}
+                onChange={(event) => setPlanMonth(event.target.value)}
                 className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-3 text-sm outline-none focus:border-[#C8A15A]"
               />
             </label>
@@ -442,7 +490,26 @@ export function BudgetPlanningPanel({
           </p>
         </div>
       ) : (
-        <div className="mt-5 divide-y divide-[#0D1B2A]/8">
+        <>
+          <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <PlanningSummaryCard label="Planejado" value={summary.planned} />
+            <PlanningSummaryCard
+              label="Usado/comprometido"
+              value={summary.committed}
+            />
+            <PlanningSummaryCard
+              label={summary.exceeded ? "Excesso vs planejado" : "Economia / saldo"}
+              value={Math.abs(summary.difference)}
+              negative={summary.exceeded}
+              detail={
+                summary.exceeded
+                  ? "acima do valor planejado"
+                  : "abaixo do valor planejado até agora"
+              }
+            />
+          </div>
+
+          <div className="mt-5 divide-y divide-[#0D1B2A]/8">
           {rows.map((row) => {
             const exceeded = row.remaining < 0;
             const remaining = Math.abs(row.remaining);
@@ -498,13 +565,45 @@ export function BudgetPlanningPanel({
               </div>
             );
           })}
-        </div>
+          </div>
+        </>
       )}
 
       <div className="mt-5 rounded-xl bg-[#F7F5EF] px-4 py-3 text-xs leading-5 text-[#3A3A3C]/60">
-        Ao comprar algo desse planejamento, registre a movimentação usando a categoria com o mesmo nome. O valor real pode ficar abaixo ou acima do planejado.
+        O planejamento pertence a <strong>{formatMonth(month)}</strong>. Ele não entra sozinho no gráfico de pizza porque ainda não é gasto. As movimentações reais ou contas a pagar registradas na mesma categoria entram no gráfico e consomem o valor planejado.
       </div>
     </section>
+  );
+}
+
+function PlanningSummaryCard({
+  label,
+  value,
+  detail,
+  negative = false,
+}: {
+  label: string;
+  value: number;
+  detail?: string;
+  negative?: boolean;
+}) {
+  return (
+    <div className="rounded-xl bg-[#F7F5EF] p-4">
+      <p className="text-[10px] uppercase tracking-wider text-[#3A3A3C]/45">
+        {label}
+      </p>
+      <p
+        className={[
+          "mt-1 text-lg font-semibold",
+          negative ? "text-red-700" : "text-[#0D1B2A]",
+        ].join(" ")}
+      >
+        {formatCurrency(value)}
+      </p>
+      {detail && (
+        <p className="mt-1 text-[11px] text-[#3A3A3C]/50">{detail}</p>
+      )}
+    </div>
   );
 }
 

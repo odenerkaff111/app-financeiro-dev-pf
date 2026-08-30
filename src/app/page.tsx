@@ -48,6 +48,7 @@ type PeriodFilter =
   | "today"
   | "week"
   | "month"
+  | "next_month"
   | "custom"
   | "all";
 
@@ -95,7 +96,7 @@ type Category = {
 type Transaction = {
   id: string;
   household_id: string;
-  account_id: string;
+  account_id: string | null;
   destination_account_id: string | null;
   category_id: string | null;
   type: TransactionType;
@@ -189,13 +190,24 @@ function monthStartKey(value: string) {
   return `${value.slice(0, 7)}-01`;
 }
 
+function getMonthKey(offset = 0) {
+  const reference = new Date();
+  reference.setDate(1);
+  reference.setMonth(reference.getMonth() + offset);
+  return `${reference.getFullYear()}-${String(reference.getMonth() + 1).padStart(2, "0")}`;
+}
+
 function relevantBudgetMonths(
   periodFilter: PeriodFilter,
   customStart: string,
   customEnd: string,
 ) {
   if (periodFilter === "month") {
-    return new Set([monthStartKey(getToday())]);
+    return new Set([`${getMonthKey()}-01`]);
+  }
+
+  if (periodFilter === "next_month") {
+    return new Set([`${getMonthKey(1)}-01`]);
   }
 
   if (periodFilter !== "custom" || !customStart || !customEnd || customStart > customEnd) {
@@ -250,6 +262,7 @@ export default function DashboardPage() {
     useState<PeriodFilter>("month");
   const [customStart, setCustomStart] = useState(getToday());
   const [customEnd, setCustomEnd] = useState(getToday());
+  const [annualYear, setAnnualYear] = useState(new Date().getFullYear());
 
   const [loading, setLoading] =
     useState(true);
@@ -266,17 +279,23 @@ export default function DashboardPage() {
       setLoading(true);
       setError(null);
 
-      const recurringGeneration = await supabase.rpc(
-        "pf_generate_recurring_transactions",
-        { target_month: `${getToday().slice(0, 7)}-01` },
-      );
+      const recurringGenerations = await Promise.all([
+        supabase.rpc("pf_generate_recurring_transactions", {
+          target_month: `${getMonthKey()}-01`,
+        }),
+        supabase.rpc("pf_generate_recurring_transactions", {
+          target_month: `${getMonthKey(1)}-01`,
+        }),
+      ]);
 
-      if (recurringGeneration.error) {
-        console.warn(
-          "Não foi possível gerar recorrências do mês:",
-          recurringGeneration.error,
-        );
-      }
+      recurringGenerations.forEach((generation, index) => {
+        if (generation.error) {
+          console.warn(
+            `Não foi possível gerar recorrências do ${index === 0 ? "mês atual" : "próximo mês"}:`,
+            generation.error,
+          );
+        }
+      });
 
       const [
         accountsResult,
@@ -453,6 +472,10 @@ export default function DashboardPage() {
                 weekStartsOn: 1,
               },
             );
+          }
+
+          if (periodFilter === "next_month") {
+            return referenceDate.slice(0, 7) === getMonthKey(1);
           }
 
           if (periodFilter === "custom") {
@@ -653,71 +676,83 @@ export default function DashboardPage() {
     customEnd,
   ]);
 
-  const monthlyChartData =
-    useMemo(() => {
-      const currentYear =
-        new Date().getFullYear();
+  const annualYears = useMemo(() => {
+    const years = new Set<number>([new Date().getFullYear()]);
 
-      const data = MONTH_NAMES.map(
-        (name) => ({
-          name,
-          Entradas: 0,
-          Saídas: 0,
-        }),
-      );
+    transactions.forEach((transaction) => {
+      const referenceDate =
+        transaction.status === "planned" || transaction.status === "overdue"
+          ? transaction.due_date ?? transaction.occurred_on
+          : transaction.occurred_on;
 
-      transactions.forEach(
-        (transaction) => {
-          if (
-            transaction.status !== "paid"
-          ) {
-            return;
-          }
+      const year = Number(referenceDate?.slice(0, 4));
+      if (Number.isFinite(year) && year > 2000) {
+        years.add(year);
+      }
+    });
 
-          try {
-            const date = parseISO(
-              transaction.occurred_on,
-            );
+    return Array.from(years).sort((a, b) => b - a);
+  }, [transactions]);
 
-            if (
-              date.getFullYear() !==
-              currentYear
-            ) {
-              return;
-            }
+  const monthlyChartData = useMemo(() => {
+    const data = MONTH_NAMES.map((name) => ({
+      name,
+      Entradas: 0,
+      Saídas: 0,
+    }));
 
-            const amount =
-              Number(transaction.amount) ||
-              0;
+    transactions.forEach((transaction) => {
+      if (transaction.status === "cancelled") {
+        return;
+      }
 
-            const item =
-              data[date.getMonth()];
+      const effectiveStatus = getEffectiveStatus(transaction);
+      const referenceDate =
+        effectiveStatus === "planned" || effectiveStatus === "overdue"
+          ? transaction.due_date ?? transaction.occurred_on
+          : transaction.occurred_on;
 
-            if (
-              transaction.type ===
-                "income" ||
-              transaction.type ===
-                "debt_received"
-            ) {
-              item.Entradas += amount;
-            }
+      try {
+        const date = parseISO(referenceDate);
 
-            if (
-              transaction.type ===
-                "expense" ||
-              transaction.type ===
-                "debt_payment"
-            ) {
-              item.Saídas += amount;
-            }
-          } catch {
-            return;
-          }
-        },
-      );
+        if (date.getFullYear() !== annualYear) {
+          return;
+        }
 
-      return data;
-    }, [transactions]);
+        const amount = Number(transaction.amount) || 0;
+        const item = data[date.getMonth()];
+
+        if (
+          transaction.type === "income" ||
+          transaction.type === "debt_received"
+        ) {
+          item.Entradas += amount;
+        }
+
+        if (
+          transaction.type === "expense" ||
+          transaction.type === "debt_payment"
+        ) {
+          item.Saídas += amount;
+        }
+      } catch {
+        return;
+      }
+    });
+
+    return data;
+  }, [transactions, annualYear]);
+
+  const annualTotals = useMemo(() => {
+    return monthlyChartData.reduce(
+      (totals, month) => {
+        totals.income += month.Entradas;
+        totals.expense += month.Saídas;
+        return totals;
+      },
+      { income: 0, expense: 0 },
+    );
+  }, [monthlyChartData]);
 
   const categoryChartData =
     useMemo(() => {
@@ -861,6 +896,10 @@ export default function DashboardPage() {
       label: "Este mês",
     },
     {
+      value: "next_month",
+      label: "Próximo mês",
+    },
+    {
       value: "custom",
       label: "Personalizado",
     },
@@ -957,11 +996,108 @@ export default function DashboardPage() {
         budgetReserve={budgetReserve}
       />
 
+      <section className="rounded-2xl border border-[#0D1B2A]/10 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#C8A15A]">
+              Visão anual
+            </p>
+            <h2 className="mt-1 text-xl font-semibold tracking-tight text-[#0D1B2A]">
+              Mês a mês
+            </h2>
+            <p className="mt-1 text-xs leading-5 text-[#3A3A3C]/55">
+              Realizado + previsto. Lançamentos concluídos usam a data real; pendências usam o vencimento ou a data prevista.
+            </p>
+          </div>
+
+          <label className="flex items-center gap-2 text-xs font-medium text-[#3A3A3C]/65">
+            Ano
+            <select
+              value={annualYear}
+              onChange={(event) => setAnnualYear(Number(event.target.value))}
+              className="h-10 rounded-xl border border-[#0D1B2A]/10 bg-[#F7F5EF] px-3 text-sm font-semibold text-[#0D1B2A] outline-none"
+            >
+              {annualYears.map((year) => (
+                <option key={year} value={year}>
+                  {year}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="rounded-xl bg-emerald-50/70 p-4">
+            <p className="text-xs text-emerald-700">Entradas do ano</p>
+            <p className="mt-1 text-lg font-semibold text-emerald-800">
+              {formatCurrency(annualTotals.income)}
+            </p>
+          </div>
+          <div className="rounded-xl bg-red-50/70 p-4">
+            <p className="text-xs text-red-700">Gastos e compromissos do ano</p>
+            <p className="mt-1 text-lg font-semibold text-red-800">
+              {formatCurrency(annualTotals.expense)}
+            </p>
+          </div>
+          <div className="rounded-xl bg-[#F7F5EF] p-4">
+            <p className="text-xs text-[#3A3A3C]/60">Saldo projetado do ano</p>
+            <p
+              className={[
+                "mt-1 text-lg font-semibold",
+                annualTotals.income - annualTotals.expense >= 0
+                  ? "text-emerald-800"
+                  : "text-red-800",
+              ].join(" ")}
+            >
+              {formatCurrency(annualTotals.income - annualTotals.expense)}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-5 h-[300px] min-h-[300px] min-w-0 w-full">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={300}>
+            <BarChart data={monthlyChartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.2} />
+              <XAxis dataKey="name" tickLine={false} axisLine={false} fontSize={11} />
+              <YAxis
+                tickFormatter={(value) => formatCompactCurrency(Number(value))}
+                tickLine={false}
+                axisLine={false}
+                width={54}
+                fontSize={10}
+              />
+              <RechartsTooltip
+                formatter={(value, name) => [formatCurrency(Number(value)), String(name)]}
+                cursor={{ opacity: 0.08 }}
+              />
+              <Bar dataKey="Entradas" fill="#047857" radius={[5, 5, 0, 0]} />
+              <Bar dataKey="Saídas" fill="#B91C1C" radius={[5, 5, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+          {monthlyChartData.map((month) => (
+            <div key={month.name} className="rounded-xl border border-[#0D1B2A]/8 bg-[#F7F5EF]/60 p-3">
+              <p className="text-xs font-semibold text-[#0D1B2A]">{month.name}</p>
+              <p className="mt-1 text-[11px] text-emerald-700">
+                + {formatCurrency(month.Entradas)}
+              </p>
+              <p className="text-[11px] text-red-700">
+                - {formatCurrency(month.Saídas)}
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
+
       <BudgetPlanningPanel
         defaultMonth={
-          periodFilter === "custom" && customStart
-            ? customStart.slice(0, 7)
-            : getToday().slice(0, 7)
+          periodFilter === "next_month"
+            ? getMonthKey(1)
+            : periodFilter === "custom" && customStart
+              ? customStart.slice(0, 7)
+              : getMonthKey()
         }
       />
 

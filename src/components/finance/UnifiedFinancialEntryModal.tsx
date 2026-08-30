@@ -619,7 +619,7 @@ export function UnifiedFinancialEntryModal({
           form.description.trim() || `Dívida com ${form.counterparty.trim()}`,
         debt_original_amount: amount,
         target_debt_group: form.debtGroup,
-        debt_start_date: form.date,
+        debt_start_date: today(),
         debt_due_date: form.dueDate || form.date,
         debt_installment_amount: null,
         debt_interest_enabled: false,
@@ -654,17 +654,17 @@ export function UnifiedFinancialEntryModal({
       return;
     }
 
+    const movementDate = form.status === "paid" ? form.date : today();
     const paidAt =
       form.status === "paid"
-        ? new Date(`${form.date}T12:00:00-03:00`).toISOString()
+        ? new Date(`${movementDate}T12:00:00-03:00`).toISOString()
         : null;
 
     const effectiveDueDate =
-      form.kind === "income"
-        ? form.date
-        : form.kind === "expense"
-          ? form.dueDate || form.date
-          : form.date;
+      (form.kind === "income" || form.kind === "expense") &&
+      form.status === "planned"
+        ? form.dueDate || form.date
+        : null;
 
     let destinationAccountId: string | null = requiresDestination
       ? form.destinationAccountId
@@ -689,7 +689,7 @@ export function UnifiedFinancialEntryModal({
       merchant: form.counterparty.trim() || null,
       amount,
       original_amount: amount,
-      occurred_on: form.date,
+      occurred_on: movementDate,
       due_date: effectiveDueDate,
       paid_at: paidAt,
       source: "manual",
@@ -1312,22 +1312,33 @@ export function UnifiedFinancialEntryModal({
                             )}
                           </div>
                         )}
-                        <DateField
-                          label={
-                            form.kind === "income"
-                              ? form.status === "planned"
-                                ? "Data prevista do recebimento"
-                                : "Data do recebimento"
-                              : "Data"
-                          }
-                          value={form.date}
-                          onChange={(value) => update("date", value)}
-                        />
-                        {form.kind === "expense" && (
+                        {(form.kind === "expense" || form.kind === "income") ? (
+                          form.status === "planned" ? (
+                            <DateField
+                              label={
+                                form.kind === "expense"
+                                  ? "Vencimento"
+                                  : "Data prevista do recebimento"
+                              }
+                              value={form.dueDate}
+                              onChange={(value) => update("dueDate", value)}
+                            />
+                          ) : (
+                            <DateField
+                              label={
+                                form.kind === "expense"
+                                  ? "Data do pagamento"
+                                  : "Data do recebimento"
+                              }
+                              value={form.date}
+                              onChange={(value) => update("date", value)}
+                            />
+                          )
+                        ) : (
                           <DateField
-                            label="Vencimento"
-                            value={form.dueDate}
-                            onChange={(value) => update("dueDate", value)}
+                            label="Data da movimentação"
+                            value={form.date}
+                            onChange={(value) => update("date", value)}
                           />
                         )}
                       </div>
@@ -1338,8 +1349,10 @@ export function UnifiedFinancialEntryModal({
                             checked={form.isRecurring}
                             onChange={(checked) => update("isRecurring", checked)}
                             day={Number(
-                              (form.kind === "income" ? form.date : form.dueDate || form.date)
-                                .slice(8, 10),
+                              (form.status === "planned"
+                                ? form.dueDate || form.date
+                                : form.date
+                              ).slice(8, 10),
                             )}
                           />
                         )}

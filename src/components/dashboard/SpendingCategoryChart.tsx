@@ -31,6 +31,7 @@ type PeriodFilter =
   | "today"
   | "week"
   | "month"
+  | "next_month"
   | "custom"
   | "all";
 
@@ -80,6 +81,7 @@ const PERIOD_LABELS: Record<PeriodFilter, string> = {
   today: "hoje",
   week: "nesta semana",
   month: "neste mês",
+  next_month: "no próximo mês",
   custom: "no período personalizado",
   all: "em todo o período",
 };
@@ -126,6 +128,11 @@ function isDateInPeriod(
       return isSameWeek(date, today, {
         weekStartsOn: 1,
       });
+    }
+
+    if (periodFilter === "next_month") {
+      const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 15);
+      return isSameMonth(date, nextMonth);
     }
 
     if (periodFilter === "custom") {

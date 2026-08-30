@@ -1,0 +1,15 @@
+AJUSTE 028 - ACORDOS DE DIVIDA + VISAO ANUAL
+
+Arquivos:
+- src/components/finance/DebtTrackingPanel.tsx
+- src/app/page.tsx
+- supabase/migrations/028_debt_agreements_and_annual_view.sql
+
+O que muda:
+1. Outras dividas ganham Atualizar saldo para registrar acordo/desconto sem alterar o valor original.
+2. Reducoes entram como discount; aumentos entram como fee no historico da divida.
+3. O A pagar vinculado acompanha o novo saldo/acordo.
+4. Dashboard ganha Visao anual mes a mes com Jan-Dez, total anual de entradas, gastos/compromissos e saldo projetado.
+5. A visao anual usa data real para realizado e vencimento/data prevista para planejado.
+
+Aplique a migration 028 inteira no Supabase SQL Editor antes de testar Atualizar saldo.

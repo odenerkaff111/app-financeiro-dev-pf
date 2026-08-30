@@ -231,6 +231,13 @@ function getToday() {
   return `${year}-${month}-${day}`;
 }
 
+function getMonthKey(offset = 0) {
+  const reference = new Date();
+  reference.setDate(1);
+  reference.setMonth(reference.getMonth() + offset);
+  return `${reference.getFullYear()}-${String(reference.getMonth() + 1).padStart(2, "0")}`;
+}
+
 function createEmptyForm(): TransactionForm {
   const today = getToday();
 
@@ -425,7 +432,7 @@ export default function TransactionsPage() {
   const [search, setSearch] = useState("");
 
   const [periodFilter, setPeriodFilter] = useState<
-    "month" | "year" | "custom" | "all"
+    "month" | "next_month" | "year" | "custom" | "all"
   >("month");
   const [customStart, setCustomStart] = useState(getToday());
   const [customEnd, setCustomEnd] = useState(getToday());
@@ -442,17 +449,23 @@ export default function TransactionsPage() {
     setLoading(true);
     setPageError(null);
 
-    const recurringGeneration = await supabase.rpc(
-      "pf_generate_recurring_transactions",
-      { target_month: `${getToday().slice(0, 7)}-01` },
-    );
+    const recurringGenerations = await Promise.all([
+      supabase.rpc("pf_generate_recurring_transactions", {
+        target_month: `${getMonthKey()}-01`,
+      }),
+      supabase.rpc("pf_generate_recurring_transactions", {
+        target_month: `${getMonthKey(1)}-01`,
+      }),
+    ]);
 
-    if (recurringGeneration.error) {
-      console.warn(
-        "Não foi possível gerar recorrências do mês:",
-        recurringGeneration.error,
-      );
-    }
+    recurringGenerations.forEach((generation, index) => {
+      if (generation.error) {
+        console.warn(
+          `Não foi possível gerar recorrências do ${index === 0 ? "mês atual" : "próximo mês"}:`,
+          generation.error,
+        );
+      }
+    });
 
     const [
       sessionResult,
@@ -599,7 +612,7 @@ export default function TransactionsPage() {
       .trim()
       .toLowerCase();
 
-    return transactions.filter((transaction) => {
+    const filtered = transactions.filter((transaction) => {
       const account = transaction.account_id
         ? accountMap.get(transaction.account_id)
         : undefined;
@@ -668,6 +681,10 @@ export default function TransactionsPage() {
           );
         }
 
+        if (periodFilter === "next_month") {
+          return referenceDate.slice(0, 7) === getMonthKey(1);
+        }
+
         if (periodFilter === "year") {
           return isSameYear(
             transactionDate,
@@ -687,6 +704,21 @@ export default function TransactionsPage() {
       }
 
       return true;
+    });
+
+    return filtered.sort((first, second) => {
+      const firstStatus = getEffectiveStatus(first);
+      const secondStatus = getEffectiveStatus(second);
+      const firstReference =
+        firstStatus === "planned" || firstStatus === "overdue"
+          ? first.due_date ?? first.occurred_on
+          : first.occurred_on;
+      const secondReference =
+        secondStatus === "planned" || secondStatus === "overdue"
+          ? second.due_date ?? second.occurred_on
+          : second.occurred_on;
+
+      return secondReference.localeCompare(firstReference);
     });
   }, [
     transactions,
@@ -1295,6 +1327,10 @@ export default function TransactionsPage() {
             Este mês
           </option>
 
+          <option value="next_month">
+            Próximo mês
+          </option>
+
           <option value="year">
             Este ano
           </option>
@@ -1419,11 +1455,15 @@ export default function TransactionsPage() {
       ) : (
         <section className="overflow-hidden rounded-2xl border border-[#0D1B2A]/10 bg-white shadow-sm">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[980px] text-left text-sm">
+            <table className="w-full min-w-[1100px] text-left text-sm">
               <thead className="border-b border-[#0D1B2A]/8 bg-[#F7F5EF]">
                 <tr>
                   <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-[#3A3A3C]/60">
-                    Data
+                    Movimentação
+                  </th>
+
+                  <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-[#3A3A3C]/60">
+                    Vencimento
                   </th>
 
                   <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-[#3A3A3C]/60">
@@ -1496,9 +1536,15 @@ export default function TransactionsPage() {
                         className="border-b border-[#0D1B2A]/7 last:border-0 hover:bg-[#F7F5EF]/70"
                       >
                         <td className="whitespace-nowrap px-5 py-4 text-[#3A3A3C]/70">
-                          {formatDate(
-                            transaction.occurred_on,
-                          )}
+                          {transaction.status === "paid"
+                            ? formatDate(transaction.occurred_on)
+                            : "—"}
+                        </td>
+
+                        <td className="whitespace-nowrap px-5 py-4 text-[#3A3A3C]/70">
+                          {transaction.due_date
+                            ? formatDate(transaction.due_date)
+                            : "—"}
                         </td>
 
                         <td className="px-5 py-4">
@@ -1958,44 +2004,39 @@ export default function TransactionsPage() {
                   </div>
 
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                    <label className="space-y-2">
-                      <span className="text-sm font-medium text-[#0D1B2A]">
-                        Data da movimentação
-                      </span>
+                    {form.status === "paid" ? (
+                      <label className="space-y-2">
+                        <span className="text-sm font-medium text-[#0D1B2A]">
+                          Data da movimentação
+                        </span>
 
-                      <input
-                        type="date"
-                        required
-                        value={
-                          form.occurred_on
-                        }
-                        onChange={(event) =>
-                          updateForm(
-                            "occurred_on",
-                            event.target.value,
-                          )
-                        }
-                        className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-4 text-sm outline-none focus:border-[#C8A15A] focus:ring-2 focus:ring-[#C8A15A]/20"
-                      />
-                    </label>
+                        <input
+                          type="date"
+                          required
+                          value={form.occurred_on}
+                          onChange={(event) =>
+                            updateForm("occurred_on", event.target.value)
+                          }
+                          className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-4 text-sm outline-none focus:border-[#C8A15A] focus:ring-2 focus:ring-[#C8A15A]/20"
+                        />
+                      </label>
+                    ) : (
+                      <label className="space-y-2">
+                        <span className="text-sm font-medium text-[#0D1B2A]">
+                          Vencimento
+                        </span>
 
-                    <label className="space-y-2">
-                      <span className="text-sm font-medium text-[#0D1B2A]">
-                        Vencimento
-                      </span>
-
-                      <input
-                        type="date"
-                        value={form.due_date}
-                        onChange={(event) =>
-                          updateForm(
-                            "due_date",
-                            event.target.value,
-                          )
-                        }
-                        className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-4 text-sm outline-none focus:border-[#C8A15A] focus:ring-2 focus:ring-[#C8A15A]/20"
-                      />
-                    </label>
+                        <input
+                          type="date"
+                          required
+                          value={form.due_date}
+                          onChange={(event) =>
+                            updateForm("due_date", event.target.value)
+                          }
+                          className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-4 text-sm outline-none focus:border-[#C8A15A] focus:ring-2 focus:ring-[#C8A15A]/20"
+                        />
+                      </label>
+                    )}
                   </div>
 
                   <label className="block space-y-2">
