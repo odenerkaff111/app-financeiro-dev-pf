@@ -1,0 +1,26 @@
+ATUALIZACAO 031 - MOVIMENTACOES, PLANEJAMENTO E CARTOES DE TERCEIROS
+
+1. Dashboard
+- restaura espacamento vertical entre os containers.
+- periodos realizados usam paid_at quando disponivel.
+
+2. Planejamento
+- continua vinculado por categoria + mes.
+- o modal avisa quando a categoria escolhida esta vinculada a um planejamento daquele mes.
+- cada gasto da mesma categoria no mesmo mes consome o planejamento.
+
+3. Movimentacoes
+- remove a coluna Conta.
+- Movimentacao real mostra data/hora de cadastro e, quando pago, a data real do pagamento.
+- filtros usam vencimento para pendencias e pagamento real para realizados.
+- novo seletor de ordenacao por periodo, cadastro ou valor.
+
+4. Cartoes de terceiros
+- nova aba Dividas > Cartoes de terceiros.
+- agrupa por titular (ex.: Vanda).
+- mostra proxima fatura, faturas por mes, parcelas pendentes e total futuro ainda devido.
+- compra no cartao aceita 1x ou parcelada.
+
+MIGRATION
+- Se 029 e 030 ja foram executadas com sucesso, execute somente 031.
+- Se ainda nao foram, execute 029, depois 030, depois 031.

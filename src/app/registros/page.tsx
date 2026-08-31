@@ -305,6 +305,38 @@ function formatDate(value: string | null) {
   }
 }
 
+function formatDateTime(value: string | null) {
+  if (!value) {
+    return "—";
+  }
+
+  try {
+    return format(parseISO(value), "dd/MM/yyyy HH:mm", {
+      locale: ptBR,
+    });
+  } catch {
+    return value;
+  }
+}
+
+function getRealMovementDate(transaction: Transaction) {
+  if (transaction.status === "paid") {
+    return transaction.paid_at?.slice(0, 10) ?? transaction.occurred_on;
+  }
+
+  return transaction.created_at.slice(0, 10);
+}
+
+function getPeriodReferenceDate(transaction: Transaction) {
+  const effectiveStatus = getEffectiveStatus(transaction);
+
+  if (effectiveStatus === "planned" || effectiveStatus === "overdue") {
+    return transaction.due_date ?? transaction.created_at.slice(0, 10);
+  }
+
+  return transaction.paid_at?.slice(0, 10) ?? transaction.occurred_on;
+}
+
 function getTypeOption(type: TransactionType | string): TypeOption {
   if (type === "debt_payment") {
     return {
@@ -449,6 +481,10 @@ export default function TransactionsPage() {
   const [statusFilter, setStatusFilter] = useState<
     "all" | TransactionStatus
   >("all");
+
+  const [sortMode, setSortMode] = useState<
+    "period_desc" | "period_asc" | "registered_desc" | "value_desc"
+  >("period_desc");
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -618,9 +654,6 @@ export default function TransactionsPage() {
       .toLowerCase();
 
     const filtered = transactions.filter((transaction) => {
-      const account = transaction.account_id
-        ? accountMap.get(transaction.account_id)
-        : undefined;
 
       const category = transaction.category_id
         ? categoryMap.get(transaction.category_id)
@@ -630,8 +663,6 @@ export default function TransactionsPage() {
         transaction.description,
         transaction.merchant,
         transaction.notes,
-        account?.name,
-        account?.institution_name,
         category?.name,
       ]
         .filter(Boolean)
@@ -673,10 +704,7 @@ export default function TransactionsPage() {
       }
 
       try {
-        const referenceDate =
-          effectiveStatus === "planned" || effectiveStatus === "overdue"
-            ? transaction.due_date ?? transaction.occurred_on
-            : transaction.occurred_on;
+        const referenceDate = getPeriodReferenceDate(transaction);
         const transactionDate = parseISO(referenceDate);
 
         if (periodFilter === "week") {
@@ -718,22 +746,23 @@ export default function TransactionsPage() {
     });
 
     return filtered.sort((first, second) => {
-      const firstStatus = getEffectiveStatus(first);
-      const secondStatus = getEffectiveStatus(second);
-      const firstReference =
-        firstStatus === "planned" || firstStatus === "overdue"
-          ? first.due_date ?? first.occurred_on
-          : first.occurred_on;
-      const secondReference =
-        secondStatus === "planned" || secondStatus === "overdue"
-          ? second.due_date ?? second.occurred_on
-          : second.occurred_on;
+      if (sortMode === "registered_desc") {
+        return second.created_at.localeCompare(first.created_at);
+      }
 
-      return secondReference.localeCompare(firstReference);
+      if (sortMode === "value_desc") {
+        return Number(second.amount || 0) - Number(first.amount || 0);
+      }
+
+      const firstReference = getPeriodReferenceDate(first);
+      const secondReference = getPeriodReferenceDate(second);
+
+      return sortMode === "period_asc"
+        ? firstReference.localeCompare(secondReference)
+        : secondReference.localeCompare(firstReference);
     });
   }, [
     transactions,
-    accountMap,
     categoryMap,
     search,
     typeFilter,
@@ -741,6 +770,7 @@ export default function TransactionsPage() {
     periodFilter,
     customStart,
     customEnd,
+    sortMode,
   ]);
 
   const activeAccounts = useMemo(
@@ -1300,7 +1330,7 @@ export default function TransactionsPage() {
           </div>
         )}
 
-      <section className="grid grid-cols-1 gap-3 rounded-2xl border border-[#0D1B2A]/10 bg-white/80 p-4 shadow-sm md:grid-cols-[minmax(240px,1fr)_auto_auto_auto]">
+      <section className="grid grid-cols-1 gap-3 rounded-2xl border border-[#0D1B2A]/10 bg-white/80 p-4 shadow-sm md:grid-cols-[minmax(220px,1fr)_auto_auto_auto_auto]">
         <div className="relative">
           <Search
             size={18}
@@ -1315,7 +1345,7 @@ export default function TransactionsPage() {
                 event.target.value,
               )
             }
-            placeholder="Buscar descrição, estabelecimento ou conta..."
+            placeholder="Buscar descrição, estabelecimento ou categoria..."
             className="h-11 w-full rounded-xl border border-[#0D1B2A]/12 bg-white pl-10 pr-4 text-sm text-[#0D1B2A] outline-none transition focus:border-[#C8A15A] focus:ring-2 focus:ring-[#C8A15A]/20"
           />
         </div>
@@ -1419,8 +1449,27 @@ export default function TransactionsPage() {
           </option>
         </select>
 
+        <select
+          value={sortMode}
+          onChange={(event) =>
+            setSortMode(
+              event.target.value as
+                | "period_desc"
+                | "period_asc"
+                | "registered_desc"
+                | "value_desc",
+            )
+          }
+          className="h-11 rounded-xl border border-[#0D1B2A]/12 bg-white px-4 text-sm text-[#0D1B2A] outline-none"
+        >
+          <option value="period_desc">Período: mais recente</option>
+          <option value="period_asc">Período: mais próximo</option>
+          <option value="registered_desc">Cadastro: mais recente</option>
+          <option value="value_desc">Maior valor</option>
+        </select>
+
         {periodFilter === "custom" && (
-          <div className="grid grid-cols-1 gap-3 rounded-xl border border-[#0D1B2A]/10 bg-[#F7F5EF] p-3 md:col-span-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 rounded-xl border border-[#0D1B2A]/10 bg-[#F7F5EF] p-3 md:col-span-5 sm:grid-cols-2">
             <label className="space-y-1">
               <span className="text-xs font-medium text-[#0D1B2A]/65">De</span>
               <input
@@ -1487,10 +1536,6 @@ export default function TransactionsPage() {
                   </th>
 
                   <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-[#3A3A3C]/60">
-                    Conta
-                  </th>
-
-                  <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-[#3A3A3C]/60">
                     Categoria
                   </th>
 
@@ -1515,17 +1560,6 @@ export default function TransactionsPage() {
               <tbody>
                 {filteredTransactions.map(
                   (transaction) => {
-                    const account = transaction.account_id
-                      ? accountMap.get(transaction.account_id)
-                      : undefined;
-
-                    const destinationAccount =
-                      transaction.destination_account_id
-                        ? accountMap.get(
-                            transaction.destination_account_id,
-                          )
-                        : null;
-
                     const category =
                       transaction.category_id
                         ? categoryMap.get(
@@ -1545,22 +1579,6 @@ export default function TransactionsPage() {
                       getEffectiveStatus(
                         transaction,
                       );
-
-                    const cardAccountId =
-                      typeof transaction.metadata?.credit_card_account_id === "string"
-                        ? transaction.metadata.credit_card_account_id
-                        : null;
-                    const installmentCardAccount = cardAccountId
-                      ? accountMap.get(cardAccountId)
-                      : null;
-                    const installmentCardHolder =
-                      typeof transaction.metadata?.card_holder === "string"
-                        ? transaction.metadata.card_holder
-                        : null;
-                    const installmentCardInstitution =
-                      typeof transaction.metadata?.card_institution === "string"
-                        ? transaction.metadata.card_institution
-                        : null;
                     const isInstallmentPurchase = Boolean(
                       transaction.installment_group_id &&
                         transaction.installment_number &&
@@ -1573,18 +1591,27 @@ export default function TransactionsPage() {
                         className="border-b border-[#0D1B2A]/7 last:border-0 hover:bg-[#F7F5EF]/70"
                       >
                         <td className="whitespace-nowrap px-5 py-4 text-[#3A3A3C]/70">
-                          {transaction.status === "paid" ? (
-                            formatDate(transaction.occurred_on)
-                          ) : (
-                            <div>
-                              <p className="text-xs font-medium text-[#3A3A3C]/65">
-                                Ainda não realizada
-                              </p>
-                              <p className="mt-0.5 text-[10px] text-[#3A3A3C]/40">
-                                Registrada em {formatDate(transaction.created_at)}
-                              </p>
-                            </div>
-                          )}
+                          <div>
+                            {transaction.status === "paid" ? (
+                              <>
+                                <p className="text-xs font-semibold text-emerald-700">
+                                  Pago em {formatDate(transaction.paid_at ?? transaction.occurred_on)}
+                                </p>
+                                <p className="mt-0.5 text-[10px] text-[#3A3A3C]/45">
+                                  Registrado {formatDateTime(transaction.created_at)}
+                                </p>
+                              </>
+                            ) : (
+                              <>
+                                <p className="text-xs font-medium text-[#0D1B2A]/70">
+                                  Registrado {formatDateTime(transaction.created_at)}
+                                </p>
+                                <p className="mt-0.5 text-[10px] text-[#3A3A3C]/45">
+                                  Aguardando realização
+                                </p>
+                              </>
+                            )}
+                          </div>
                         </td>
 
                         <td className="whitespace-nowrap px-5 py-4 text-[#3A3A3C]/70">
@@ -1613,51 +1640,6 @@ export default function TransactionsPage() {
                               Parcela {transaction.installment_number}/{transaction.installment_total}
                             </p>
                           )}
-                        </td>
-
-                        <td className="px-5 py-4">
-                          <div className="flex items-center gap-2">
-                            {isInstallmentPurchase ? (
-                              <CreditCard
-                                size={15}
-                                className="text-[#C8A15A]"
-                              />
-                            ) : (
-                              <Landmark
-                                size={15}
-                                className="text-[#C8A15A]"
-                              />
-                            )}
-
-                            <div>
-                              <p className="text-[#0D1B2A]">
-                                {account?.name ??
-                                  installmentCardAccount?.name ??
-                                  (installmentCardHolder
-                                    ? `Cartão de ${installmentCardHolder}`
-                                    : "Não informada")}
-                              </p>
-
-                              {(account?.institution_name ||
-                                installmentCardAccount?.institution_name ||
-                                installmentCardInstitution) && (
-                                <p className="mt-0.5 text-xs text-[#3A3A3C]/55">
-                                  {account?.institution_name ??
-                                    installmentCardAccount?.institution_name ??
-                                    installmentCardInstitution}
-                                </p>
-                              )}
-
-                              {destinationAccount && (
-                                <p className="mt-0.5 text-xs text-[#3A3A3C]/55">
-                                  →{" "}
-                                  {
-                                    destinationAccount.name
-                                  }
-                                </p>
-                              )}
-                            </div>
-                          </div>
                         </td>
 
                         <td className="px-5 py-4 text-[#3A3A3C]/70">

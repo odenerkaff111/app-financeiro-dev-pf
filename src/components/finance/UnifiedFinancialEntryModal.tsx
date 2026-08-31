@@ -62,6 +62,13 @@ type Category = {
   kind: string;
 };
 
+type Budget = {
+  id: string;
+  category_id: string;
+  month: string;
+  amount: number | string;
+};
+
 type FormState = {
   kind: EntryKind;
   description: string;
@@ -232,6 +239,7 @@ export function UnifiedFinancialEntryModal({
   const [form, setForm] = useState<FormState>(emptyForm());
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [budgets, setBudgets] = useState<Budget[]>([]);
   const [debts, setDebts] = useState<DebtPosition[]>([]);
   const [commitments, setCommitments] = useState<CommitmentProgress[]>([]);
   const [loading, setLoading] = useState(false);
@@ -245,7 +253,7 @@ export function UnifiedFinancialEntryModal({
     setLoading(true);
     setError(null);
 
-    const [accountsResult, categoriesResult, debtsResult, commitmentsResult] =
+    const [accountsResult, categoriesResult, budgetsResult, debtsResult, commitmentsResult] =
       await Promise.all([
         supabase
           .from("pf_accounts")
@@ -258,6 +266,10 @@ export function UnifiedFinancialEntryModal({
           .select("id, name, kind")
           .eq("household_id", household.id)
           .order("name"),
+        supabase
+          .from("pf_budgets")
+          .select("id, category_id, month, amount")
+          .eq("household_id", household.id),
         supabase
           .from("pf_debt_positions")
           .select("*")
@@ -276,6 +288,7 @@ export function UnifiedFinancialEntryModal({
     const firstError =
       accountsResult.error ??
       categoriesResult.error ??
+      budgetsResult.error ??
       debtsResult.error ??
       commitmentsResult.error;
 
@@ -288,6 +301,7 @@ export function UnifiedFinancialEntryModal({
     const loadedAccounts = (accountsResult.data ?? []) as Account[];
     setAccounts(loadedAccounts);
     setCategories((categoriesResult.data ?? []) as Category[]);
+    setBudgets((budgetsResult.data ?? []) as Budget[]);
     setDebts((debtsResult.data ?? []) as DebtPosition[]);
     setCommitments((commitmentsResult.data ?? []) as CommitmentProgress[]);
 
@@ -376,6 +390,36 @@ export function UnifiedFinancialEntryModal({
     () => categories.find((category) => category.id === form.categoryId) ?? null,
     [categories, form.categoryId],
   );
+
+  const selectedPlanning = useMemo(() => {
+    if (form.kind !== "expense" || !form.categoryId) return null;
+
+    const referenceDate = form.isInstallmentPurchase
+      ? form.installmentFirstDueDate
+      : form.status === "planned"
+        ? form.dueDate || form.date
+        : form.date;
+
+    if (!referenceDate || referenceDate.length < 7) return null;
+    const referenceMonth = referenceDate.slice(0, 7);
+
+    return (
+      budgets.find(
+        (budget) =>
+          budget.category_id === form.categoryId &&
+          budget.month.slice(0, 7) === referenceMonth,
+      ) ?? null
+    );
+  }, [
+    budgets,
+    form.categoryId,
+    form.date,
+    form.dueDate,
+    form.installmentFirstDueDate,
+    form.isInstallmentPurchase,
+    form.kind,
+    form.status,
+  ]);
 
   const isDebtExpenseCategory =
     form.kind === "expense" &&
@@ -595,8 +639,8 @@ export function UnifiedFinancialEntryModal({
     if (!form.categoryId) {
       throw new Error("Selecione uma categoria.");
     }
-    if (!Number.isInteger(installments) || installments < 2 || installments > 120) {
-      throw new Error("Informe entre 2 e 120 parcelas.");
+    if (!Number.isInteger(installments) || installments < 1 || installments > 120) {
+      throw new Error("Informe entre 1 e 120 parcelas.");
     }
     if (!form.installmentFirstDueDate) {
       throw new Error("Informe o vencimento da primeira parcela.");
@@ -1333,10 +1377,10 @@ export function UnifiedFinancialEntryModal({
                               />
                               <span>
                                 <span className="block text-sm font-semibold text-[#0D1B2A]">
-                                  Compra parcelada no cartão
+                                  Compra no cartão / parcelada
                                 </span>
                                 <span className="mt-1 block text-xs leading-5 text-[#3A3A3C]/60">
-                                  Cria uma conta a pagar para cada parcela nos próximos meses. Funciona com cartão seu ou de outra pessoa.
+                                  Registre 1x ou parcelado. Cria os vencimentos automaticamente e funciona com cartão seu ou de outra pessoa.
                                 </span>
                               </span>
                             </label>
@@ -1414,7 +1458,7 @@ export function UnifiedFinancialEntryModal({
                                     form.installmentPurchaseCount || "0",
                                     10,
                                   );
-                                  if (!Number.isFinite(total) || total <= 0 || count < 2) {
+                                  if (!Number.isFinite(total) || total <= 0 || count < 1) {
                                     return null;
                                   }
                                   return (
@@ -1452,6 +1496,12 @@ export function UnifiedFinancialEntryModal({
                               }))}
                               emptyLabel="Selecione"
                             />
+
+                            {selectedPlanning && (
+                              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-xs leading-5 text-emerald-800">
+                                Vinculado automaticamente ao planejamento <strong>{selectedCategory?.name}</strong> deste mês ({formatCurrency(selectedPlanning.amount)} planejados). O vínculo é feito pela categoria + mês; cada gasto registrado nessa categoria consome o mesmo planejamento.
+                              </div>
+                            )}
 
                             {isDebtExpenseCategory && (
                               <div className="space-y-3 rounded-xl border border-[#C8A15A]/35 bg-[#C8A15A]/10 px-3 py-3">

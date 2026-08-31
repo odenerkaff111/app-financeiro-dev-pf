@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { HandCoins, Landmark } from "lucide-react";
+import { CreditCard, HandCoins, Landmark } from "lucide-react";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
@@ -16,6 +16,11 @@ const items = [
     href: "/dividas/outras",
     label: "Outras dívidas",
     icon: Landmark,
+  },
+  {
+    href: "/dividas/cartoes-terceiros",
+    label: "Cartões de terceiros",
+    icon: CreditCard,
   },
 ];
 

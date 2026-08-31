@@ -479,7 +479,7 @@ export default function DashboardPage() {
             effectiveStatus === "planned" ||
             effectiveStatus === "overdue"
               ? transaction.due_date ?? transaction.occurred_on
-              : transaction.occurred_on;
+              : transaction.paid_at?.slice(0, 10) ?? transaction.occurred_on;
 
           const date = parseISO(referenceDate);
 
@@ -667,7 +667,7 @@ export default function DashboardPage() {
       const referenceDate =
         effectiveStatus === "planned" || effectiveStatus === "overdue"
           ? transaction.due_date ?? transaction.occurred_on
-          : transaction.occurred_on;
+          : transaction.paid_at?.slice(0, 10) ?? transaction.occurred_on;
       const month = monthStartKey(referenceDate);
 
       if (!relevantMonths.has(month)) {
@@ -706,7 +706,7 @@ export default function DashboardPage() {
       const referenceDate =
         transaction.status === "planned" || transaction.status === "overdue"
           ? transaction.due_date ?? transaction.occurred_on
-          : transaction.occurred_on;
+          : transaction.paid_at?.slice(0, 10) ?? transaction.occurred_on;
 
       const year = Number(referenceDate?.slice(0, 4));
       if (Number.isFinite(year) && year > 2000) {
@@ -733,7 +733,7 @@ export default function DashboardPage() {
       const referenceDate =
         effectiveStatus === "planned" || effectiveStatus === "overdue"
           ? transaction.due_date ?? transaction.occurred_on
-          : transaction.occurred_on;
+          : transaction.paid_at?.slice(0, 10) ?? transaction.occurred_on;
 
       try {
         const date = parseISO(referenceDate);
@@ -1031,7 +1031,7 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      <div className={privateDataClass}>
+      <div className={[privateDataClass, "space-y-6"].join(" ")}>
       <MonthlyClosingSection
         periodFilter={periodFilter}
         income={metrics.income}
