@@ -1,0 +1,29 @@
+AJUSTE 029 - MOBILE, SEMANA, PRIVACIDADE, CARTAO E RECORRENCIA
+
+Arquivos alterados:
+- src/app/page.tsx
+- src/app/registros/page.tsx
+- src/app/contas/page.tsx
+- src/components/AppDock.tsx
+- src/components/AppLayout.tsx
+- src/components/dashboard/SpendingCategoryChart.tsx
+- src/components/dashboard/BudgetPlanningPanel.tsx
+- src/components/finance/UnifiedFinancialEntryModal.tsx
+- supabase/migrations/029_credit_available_and_recurrence_end.sql
+
+Principais mudancas:
+1. Semana passa a ser domingo a sabado.
+2. Movimentacao planejada mostra "Ainda nao realizada" e data de cadastro.
+3. Dashboard ganha olho para ocultar/mostrar dados financeiros.
+4. Cartoes passam a guardar e exibir limite disponivel.
+5. Cartao ganha fluxo "Atualizar limite" depois do pagamento da fatura, com confirmacao do valor liberado.
+6. Recorrencia mensal ganha data final opcional.
+7. Grafico de pizza usa cores geradas sem repeticao exata.
+8. Planejamento explica que cada gasto real na mesma categoria consome o saldo reservado.
+9. Navegacao mobile ganha barra inferior e cabecalho compacto.
+
+Migration:
+Execute todo o arquivo 029_credit_available_and_recurrence_end.sql no Supabase SQL Editor.
+
+Validacao:
+- npx tsc --noEmit: OK

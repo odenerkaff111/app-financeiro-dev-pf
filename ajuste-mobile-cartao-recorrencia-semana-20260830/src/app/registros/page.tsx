@@ -11,7 +11,6 @@ import {
 import {
   ArrowRightLeft,
   CircleDollarSign,
-  CreditCard,
   Landmark,
   Loader2,
   Pencil,
@@ -107,9 +106,6 @@ type Transaction = {
   occurred_on: string;
   due_date: string | null;
   paid_at: string | null;
-  installment_group_id: string | null;
-  installment_number: number | null;
-  installment_total: number | null;
   source: TransactionSource;
   notes: string | null;
   metadata: Record<string, unknown> | null;
@@ -1546,27 +1542,6 @@ export default function TransactionsPage() {
                         transaction,
                       );
 
-                    const cardAccountId =
-                      typeof transaction.metadata?.credit_card_account_id === "string"
-                        ? transaction.metadata.credit_card_account_id
-                        : null;
-                    const installmentCardAccount = cardAccountId
-                      ? accountMap.get(cardAccountId)
-                      : null;
-                    const installmentCardHolder =
-                      typeof transaction.metadata?.card_holder === "string"
-                        ? transaction.metadata.card_holder
-                        : null;
-                    const installmentCardInstitution =
-                      typeof transaction.metadata?.card_institution === "string"
-                        ? transaction.metadata.card_institution
-                        : null;
-                    const isInstallmentPurchase = Boolean(
-                      transaction.installment_group_id &&
-                        transaction.installment_number &&
-                        transaction.installment_total,
-                    );
-
                     return (
                       <tr
                         key={transaction.id}
@@ -1607,44 +1582,23 @@ export default function TransactionsPage() {
                               }
                             </p>
                           )}
-
-                          {isInstallmentPurchase && (
-                            <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-[#8A6426]">
-                              Parcela {transaction.installment_number}/{transaction.installment_total}
-                            </p>
-                          )}
                         </td>
 
                         <td className="px-5 py-4">
                           <div className="flex items-center gap-2">
-                            {isInstallmentPurchase ? (
-                              <CreditCard
-                                size={15}
-                                className="text-[#C8A15A]"
-                              />
-                            ) : (
-                              <Landmark
-                                size={15}
-                                className="text-[#C8A15A]"
-                              />
-                            )}
+                            <Landmark
+                              size={15}
+                              className="text-[#C8A15A]"
+                            />
 
                             <div>
                               <p className="text-[#0D1B2A]">
-                                {account?.name ??
-                                  installmentCardAccount?.name ??
-                                  (installmentCardHolder
-                                    ? `Cartão de ${installmentCardHolder}`
-                                    : "Não informada")}
+                                {account?.name ?? "Não informada"}
                               </p>
 
-                              {(account?.institution_name ||
-                                installmentCardAccount?.institution_name ||
-                                installmentCardInstitution) && (
+                              {account?.institution_name && (
                                 <p className="mt-0.5 text-xs text-[#3A3A3C]/55">
-                                  {account?.institution_name ??
-                                    installmentCardAccount?.institution_name ??
-                                    installmentCardInstitution}
+                                  {account.institution_name}
                                 </p>
                               )}
 

@@ -79,13 +79,6 @@ type FormState = {
   isEssential: boolean;
   isRecurring: boolean;
   recurrenceEndsOn: string;
-  isInstallmentPurchase: boolean;
-  installmentPurchaseCount: string;
-  installmentCardMode: "own" | "third_party";
-  installmentCardAccountId: string;
-  installmentCardHolder: string;
-  installmentCardInstitution: string;
-  installmentFirstDueDate: string;
 
   commitmentId: string;
   debtId: string;
@@ -182,13 +175,6 @@ function emptyForm(kind: EntryKind = "expense"): FormState {
     isEssential: false,
     isRecurring: false,
     recurrenceEndsOn: "",
-    isInstallmentPurchase: false,
-    installmentPurchaseCount: "2",
-    installmentCardMode: "third_party",
-    installmentCardAccountId: "",
-    installmentCardHolder: "",
-    installmentCardInstitution: "",
-    installmentFirstDueDate: currentDate,
     commitmentId: "",
     debtId: "",
     debtGroup: "personal",
@@ -400,11 +386,6 @@ export function UnifiedFinancialEntryModal({
     return accounts;
   }, [accounts, form.kind]);
 
-  const creditCardAccounts = useMemo(
-    () => accounts.filter((account) => account.type === "credit_card"),
-    [accounts],
-  );
-
   const destinationAccounts = useMemo(() => {
     if (form.kind === "investment_contribution") {
       return accounts.filter(
@@ -582,68 +563,7 @@ export function UnifiedFinancialEntryModal({
     return created.id;
   }
 
-  async function saveInstallmentPurchase() {
-    const amount = parsePtBrAmount(form.amount);
-    const installments = Number.parseInt(form.installmentPurchaseCount, 10);
-
-    if (!Number.isFinite(amount) || amount <= 0) {
-      throw new Error("Informe o valor total da compra.");
-    }
-    if (!form.description.trim()) {
-      throw new Error("Informe a descrição da compra parcelada.");
-    }
-    if (!form.categoryId) {
-      throw new Error("Selecione uma categoria.");
-    }
-    if (!Number.isInteger(installments) || installments < 2 || installments > 120) {
-      throw new Error("Informe entre 2 e 120 parcelas.");
-    }
-    if (!form.installmentFirstDueDate) {
-      throw new Error("Informe o vencimento da primeira parcela.");
-    }
-    if (form.installmentCardMode === "own" && !form.installmentCardAccountId) {
-      throw new Error("Selecione o cartão usado na compra.");
-    }
-    if (
-      form.installmentCardMode === "third_party" &&
-      !form.installmentCardHolder.trim()
-    ) {
-      throw new Error("Informe o titular do cartão de terceiro.");
-    }
-
-    const result = await supabase.rpc("pf_create_installment_purchase_v1", {
-      target_household_id: household.id,
-      purchase_description: form.description.trim(),
-      purchase_merchant: form.counterparty.trim() || null,
-      purchase_total_amount: amount,
-      purchase_installments: installments,
-      first_installment_due_date: form.installmentFirstDueDate,
-      purchase_category_id: form.categoryId,
-      credit_card_account_id:
-        form.installmentCardMode === "own"
-          ? form.installmentCardAccountId
-          : null,
-      third_party_card_holder:
-        form.installmentCardMode === "third_party"
-          ? form.installmentCardHolder.trim()
-          : null,
-      third_party_card_institution:
-        form.installmentCardMode === "third_party"
-          ? form.installmentCardInstitution.trim() || null
-          : null,
-      purchase_notes: form.notes.trim() || null,
-      purchase_is_essential: form.isEssential,
-    });
-
-    if (result.error) throw result.error;
-  }
-
   async function saveDirectTransaction(userId: string) {
-    if (form.kind === "expense" && form.isInstallmentPurchase) {
-      await saveInstallmentPurchase();
-      return;
-    }
-
     const amount = parsePtBrAmount(form.amount);
     const requiresDestination = [
       "transfer",
@@ -1237,8 +1157,7 @@ export function UnifiedFinancialEntryModal({
                           onChange={(value) => update("amount", value)}
                           required
                         />
-                        {(form.kind === "income" ||
-                          (form.kind === "expense" && !form.isInstallmentPurchase)) && (
+                        {(form.kind === "expense" || form.kind === "income") && (
                           <SelectField
                             label={
                               form.kind === "expense"
@@ -1288,7 +1207,7 @@ export function UnifiedFinancialEntryModal({
                             accounts={destinationAccounts}
                           />
                         )}
-                        {((form.kind === "expense" && !form.isInstallmentPurchase) ||
+                        {(form.kind === "expense" ||
                           form.kind === "income" ||
                           form.kind === "investment_contribution") && (
                           <details className="rounded-xl border border-[#0D1B2A]/10 bg-white/60 px-4 py-3 md:col-span-2">
@@ -1315,118 +1234,6 @@ export function UnifiedFinancialEntryModal({
                             O investimento de destino será organizado automaticamente pela instituição informada acima. Você não precisa cadastrar uma conta de investimento antes.
                           </div>
                         )}
-                        {form.kind === "expense" && !isDebtExpenseCategory && (
-                          <div className="space-y-3 rounded-xl border border-[#C8A15A]/25 bg-[#C8A15A]/8 px-4 py-4 md:col-span-2">
-                            <label className="flex cursor-pointer items-start gap-3">
-                              <input
-                                type="checkbox"
-                                checked={form.isInstallmentPurchase}
-                                onChange={(event) => {
-                                  const checked = event.target.checked;
-                                  update("isInstallmentPurchase", checked);
-                                  if (checked) {
-                                    update("status", "planned");
-                                    update("isRecurring", false);
-                                  }
-                                }}
-                                className="mt-0.5 h-4 w-4 accent-[#0D1B2A]"
-                              />
-                              <span>
-                                <span className="block text-sm font-semibold text-[#0D1B2A]">
-                                  Compra parcelada no cartão
-                                </span>
-                                <span className="mt-1 block text-xs leading-5 text-[#3A3A3C]/60">
-                                  Cria uma conta a pagar para cada parcela nos próximos meses. Funciona com cartão seu ou de outra pessoa.
-                                </span>
-                              </span>
-                            </label>
-
-                            {form.isInstallmentPurchase && (
-                              <div className="grid grid-cols-1 gap-3 border-t border-[#C8A15A]/20 pt-3 md:grid-cols-2">
-                                <TextField
-                                  label="Número de parcelas"
-                                  value={form.installmentPurchaseCount}
-                                  onChange={(value) => update("installmentPurchaseCount", value)}
-                                  placeholder="Ex.: 6"
-                                  required
-                                />
-                                <DateField
-                                  label="Vencimento da primeira parcela"
-                                  value={form.installmentFirstDueDate}
-                                  onChange={(value) => update("installmentFirstDueDate", value)}
-                                />
-                                <SelectField
-                                  label="De quem é o cartão?"
-                                  value={form.installmentCardMode}
-                                  onChange={(value) =>
-                                    update(
-                                      "installmentCardMode",
-                                      value as "own" | "third_party",
-                                    )
-                                  }
-                                  options={[
-                                    { value: "own", label: "Meu / da família" },
-                                    { value: "third_party", label: "De outra pessoa" },
-                                  ]}
-                                />
-
-                                {form.installmentCardMode === "own" ? (
-                                  <SelectField
-                                    label="Cartão usado"
-                                    value={form.installmentCardAccountId}
-                                    onChange={(value) => update("installmentCardAccountId", value)}
-                                    options={creditCardAccounts.map((account) => ({
-                                      value: account.id,
-                                      label: account.institution_name
-                                        ? `${account.name} · ${account.institution_name}`
-                                        : account.name,
-                                    }))}
-                                    emptyLabel={
-                                      creditCardAccounts.length > 0
-                                        ? "Selecione"
-                                        : "Nenhum cartão cadastrado"
-                                    }
-                                  />
-                                ) : (
-                                  <TextField
-                                    label="Titular do cartão"
-                                    value={form.installmentCardHolder}
-                                    onChange={(value) => update("installmentCardHolder", value)}
-                                    placeholder="Ex.: Tia Maria"
-                                    required
-                                  />
-                                )}
-
-                                {form.installmentCardMode === "third_party" && (
-                                  <TextField
-                                    label="Banco / cartão (opcional)"
-                                    value={form.installmentCardInstitution}
-                                    onChange={(value) =>
-                                      update("installmentCardInstitution", value)
-                                    }
-                                    placeholder="Ex.: Nubank"
-                                  />
-                                )}
-
-                                {(() => {
-                                  const total = parsePtBrAmount(form.amount || "0");
-                                  const count = Number.parseInt(
-                                    form.installmentPurchaseCount || "0",
-                                    10,
-                                  );
-                                  if (!Number.isFinite(total) || total <= 0 || count < 2) {
-                                    return null;
-                                  }
-                                  return (
-                                    <div className="rounded-xl bg-white px-3 py-3 text-xs text-[#0D1B2A]/70 md:col-span-2">
-                                      Aproximadamente <strong>{count}x de {formatCurrency(total / count)}</strong>. O sistema ajusta centavos automaticamente para o total fechar exatamente.
-                                    </div>
-                                  );
-                                })()}
-                              </div>
-                            )}
-                          </div>
-                        )}
                         {form.kind !== "transfer" && (
                           <div className="space-y-2">
                             <SelectField
@@ -1443,7 +1250,6 @@ export function UnifiedFinancialEntryModal({
                                 if (form.kind === "expense" && normalizedName === "dividas") {
                                   update("status", "planned");
                                   update("isRecurring", false);
-                                  update("isInstallmentPurchase", false);
                                 }
                               }}
                               options={categoryOptions.map((category) => ({
@@ -1527,7 +1333,6 @@ export function UnifiedFinancialEntryModal({
                           </div>
                         )}
                         {(form.kind === "expense" || form.kind === "income") ? (
-                          form.kind === "expense" && form.isInstallmentPurchase ? null :
                           form.status === "planned" ? (
                             <DateField
                               label={
@@ -1559,8 +1364,7 @@ export function UnifiedFinancialEntryModal({
                       </div>
 
                       {(form.kind === "expense" || form.kind === "income") &&
-                        !isDebtExpenseCategory &&
-                        !form.isInstallmentPurchase && (
+                        !isDebtExpenseCategory && (
                           <RecurringToggle
                             checked={form.isRecurring}
                             onChange={(checked) => {

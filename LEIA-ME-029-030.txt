@@ -1,0 +1,11 @@
+ATUALIZACAO CUMULATIVA 029 + 030
+
+Este ZIP nao possui pasta externa. Extraia diretamente na raiz do projeto.
+
+1. Pare o npm run dev.
+2. Extraia este ZIP em C:\Users\dener.alves_powerofd\app-financeiro-dev-pf com -Force.
+3. Rode as migrations 029 e 030, nesta ordem, no Supabase SQL Editor.
+4. Execute npx tsc --noEmit e npm run dev.
+
+030 adiciona compra parcelada no cartao proprio/familiar ou de terceiro.
+Cada parcela vira uma despesa planejada com vencimento mensal e grupo de parcelas.
