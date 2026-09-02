@@ -132,7 +132,7 @@ export function BudgetPlanningPanel({
           .select("category_id, status, amount, occurred_on, due_date")
           .eq("household_id", household.id)
           .eq("type", "expense")
-          .in("status", ["paid", "planned", "overdue"]),
+          .eq("status", "paid"),
       ]);
 
     const firstError =
@@ -161,10 +161,7 @@ export function BudgetPlanningPanel({
     transactions.forEach((transaction) => {
       if (!transaction.category_id || transaction.status === "cancelled") return;
 
-      const referenceDate =
-        transaction.status === "planned" || transaction.status === "overdue"
-          ? transaction.due_date ?? transaction.occurred_on
-          : transaction.occurred_on;
+      const referenceDate = transaction.occurred_on;
 
       if (monthKey(referenceDate) !== month) return;
 
@@ -387,7 +384,7 @@ export function BudgetPlanningPanel({
             </h2>
           </div>
           <p className="mt-1 max-w-2xl text-sm leading-6 text-[#3A3A3C]/60">
-            Reserve um valor para uma categoria. As compras e contas dessa categoria, no mesmo mês, vão consumindo o planejamento automaticamente.
+            Reserve um valor para uma categoria. Somente gastos efetivamente pagos nessa categoria e nesse mês consomem o planejamento.
           </p>
         </div>
 
@@ -533,7 +530,7 @@ export function BudgetPlanningPanel({
           <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
             <PlanningSummaryCard label="Planejado" value={summary.planned} />
             <PlanningSummaryCard
-              label="Usado/comprometido"
+              label="Usado/pago"
               value={summary.committed}
             />
             <PlanningSummaryCard
@@ -575,7 +572,7 @@ export function BudgetPlanningPanel({
                   </div>
                 </div>
                 <PlanningValue label="Planejado" value={row.planned} />
-                <PlanningValue label="Usado/comprometido" value={row.committed} />
+                <PlanningValue label="Usado/pago" value={row.committed} />
                 <PlanningValue
                   label={exceeded ? "Excedido" : "Ainda reservado"}
                   value={remaining}
@@ -609,7 +606,7 @@ export function BudgetPlanningPanel({
       )}
 
       <div className="mt-5 rounded-xl bg-[#F7F5EF] px-4 py-3 text-xs leading-5 text-[#3A3A3C]/60">
-        O planejamento pertence a <strong>{formatMonth(month)}</strong> e fica vinculado à categoria escolhida. Ele não entra sozinho no gráfico de pizza porque ainda não é gasto. Toda movimentação real ou conta a pagar dessa categoria, no mesmo mês, consome o planejamento. Ex.: planejou R$ 500 em Gasolina; abastecimentos de R$ 220 e R$ 180 consomem R$ 400 e deixam R$ 100 reservados.
+        O planejamento pertence a <strong>{formatMonth(month)}</strong> e fica vinculado à categoria escolhida. Ele não entra sozinho no gráfico de pizza porque ainda não é gasto. Somente movimentações efetivamente pagas dessa categoria, no mesmo mês, consomem o planejamento. Uma conta apenas A pagar ainda não reduz a reserva. Ex.: planejou R$ 500 em Gasolina; depois de pagar abastecimentos de R$ 220 e R$ 180, ficam R$ 100 reservados.
       </div>
     </section>
   );

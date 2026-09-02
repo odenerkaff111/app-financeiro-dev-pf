@@ -849,7 +849,7 @@ export function UnifiedFinancialEntryModal({
       }
 
       const recurringResult = await supabase.rpc(
-        "pf_make_transaction_monthly_recurring_v2",
+        "pf_make_transaction_monthly_recurring_v3",
         {
           target_transaction_id: result.data.id,
           recurrence_ends_on: form.recurrenceEndsOn || null,
@@ -1073,11 +1073,17 @@ export function UnifiedFinancialEntryModal({
       await onSaved();
       onClose();
     } catch (saveError) {
-      setError(
+      const message =
         saveError instanceof Error
           ? saveError.message
-          : "Não foi possível salvar o registro.",
-      );
+          : typeof saveError === "object" &&
+              saveError !== null &&
+              "message" in saveError &&
+              typeof (saveError as { message?: unknown }).message === "string"
+            ? (saveError as { message: string }).message
+            : "Não foi possível salvar o registro.";
+
+      setError(message);
     } finally {
       setSaving(false);
     }

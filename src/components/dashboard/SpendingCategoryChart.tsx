@@ -208,7 +208,6 @@ export function SpendingCategoryChart({
   const [commitments, setCommitments] = useState<PayableCommitment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [legendExpanded, setLegendExpanded] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -325,10 +324,6 @@ export function SpendingCategoryChart({
     [chartData],
   );
 
-  const legendData = legendExpanded
-    ? chartData
-    : chartData.slice(0, 8);
-
   if (loading) {
     return (
       <article className="flex h-full min-h-[430px] items-center justify-center rounded-2xl border border-[#0D1B2A]/10 bg-white shadow-sm">
@@ -363,8 +358,8 @@ export function SpendingCategoryChart({
           Nenhum gasto ou compromisso encontrado no período.
         </div>
       ) : (
-        <div className="mt-5 grid min-w-0 gap-5 lg:grid-cols-[minmax(220px,0.9fr)_minmax(260px,1.1fr)] lg:items-center">
-          <div className="h-60 min-h-0 min-w-0 sm:h-64">
+        <div className="mt-4 grid min-w-0 gap-4 md:grid-cols-[minmax(210px,0.85fr)_minmax(300px,1.15fr)] md:items-center">
+          <div className="h-56 min-h-0 min-w-0 sm:h-60">
             <ResponsiveContainer width="100%" height="100%" minWidth={0}>
               <PieChart>
                 <Pie
@@ -397,20 +392,15 @@ export function SpendingCategoryChart({
           </div>
 
           <div className="min-w-0">
-            <div
-              className={[
-                "space-y-2.5 pr-1",
-                legendExpanded ? "max-h-72 overflow-y-auto" : "",
-              ].join(" ")}
-            >
-              {legendData.map((category) => (
+            <div className="grid gap-x-5 gap-y-1.5 sm:grid-cols-2 md:grid-cols-1 xl:grid-cols-2">
+              {chartData.map((category) => (
                 <div
                   key={category.name}
-                  className="flex items-center justify-between gap-4 text-sm"
+                  className="flex min-w-0 items-center justify-between gap-2 text-[11px] leading-5 sm:text-xs"
                 >
-                  <div className="flex min-w-0 items-center gap-2">
+                  <div className="flex min-w-0 items-center gap-1.5">
                     <span
-                      className="h-2.5 w-2.5 shrink-0 rounded-full"
+                      className="h-2 w-2 shrink-0 rounded-full"
                       style={{
                         backgroundColor: colorByCategory.get(category.name),
                       }}
@@ -425,18 +415,6 @@ export function SpendingCategoryChart({
                 </div>
               ))}
             </div>
-
-            {chartData.length > 8 && (
-              <button
-                type="button"
-                onClick={() => setLegendExpanded((current) => !current)}
-                className="mt-3 text-xs font-semibold text-[#0D1B2A] underline decoration-[#C8A15A]/60 underline-offset-4"
-              >
-                {legendExpanded
-                  ? "Ver menos"
-                  : `Ver mais (${chartData.length - 8})`}
-              </button>
-            )}
           </div>
         </div>
       )}

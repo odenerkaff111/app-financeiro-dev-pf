@@ -1,0 +1,21 @@
+AJUSTE 034 - GRAFICO, PLANEJAMENTO E RECORRENCIA
+
+Arquivos alterados:
+- src/app/page.tsx
+- src/components/dashboard/SpendingCategoryChart.tsx
+- src/components/dashboard/BudgetPlanningPanel.tsx
+- src/components/finance/UnifiedFinancialEntryModal.tsx
+- supabase/migrations/034_recurring_registration_reliability.sql
+
+Mudancas:
+1. Gastos e compromissos ocupa 3/5 da linha; Investimentos ocupa 2/5.
+2. Legenda completa do grafico, sem botao Ver mais, fonte compacta e cores alternadas.
+3. Planejamento mensal e consumido somente por despesas status paid no mesmo mes/categoria.
+4. Labels atualizados para Usado/pago.
+5. Nova RPC pf_make_transaction_monthly_recurring_v3, independente dos wrappers anteriores.
+6. Modal passa a exibir a mensagem real do Supabase em falhas de cadastro.
+
+Aplicacao:
+- Extrair o ZIP na raiz do projeto.
+- Executar a migration 034 inteira no SQL Editor do Supabase.
+- Remover .next e iniciar npm run dev.

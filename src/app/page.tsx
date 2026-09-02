@@ -1146,17 +1146,19 @@ export default function DashboardPage() {
         }
       />
 
-      <section className="grid grid-cols-1 items-stretch gap-6 xl:grid-cols-3">
+      <section className="grid grid-cols-1 items-stretch gap-6 xl:grid-cols-5">
         <div className="xl:col-span-2">
           <InvestmentOverview />
         </div>
 
-        <SpendingCategoryChart
-          categoryData={categoryChartData}
-          periodFilter={periodFilter}
-          customStart={customStart}
-          customEnd={customEnd}
-        />
+        <div className="xl:col-span-3">
+          <SpendingCategoryChart
+            categoryData={categoryChartData}
+            periodFilter={periodFilter}
+            customStart={customStart}
+            customEnd={customEnd}
+          />
+        </div>
       </section>
 
       <UpcomingObligations />
