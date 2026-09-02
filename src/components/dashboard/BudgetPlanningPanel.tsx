@@ -95,11 +95,11 @@ export function BudgetPlanningPanel({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [planName, setPlanName] = useState("");
+  const [planCategoryId, setPlanCategoryId] = useState("");
+  const [newCategoryName, setNewCategoryName] = useState("");
   const [planAmount, setPlanAmount] = useState("");
   const [planMonth, setPlanMonth] = useState(defaultMonth);
   const [editingBudgetId, setEditingBudgetId] = useState<string | null>(null);
-  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
 
   useEffect(() => {
     if (/^\d{4}-\d{2}$/.test(defaultMonth)) {
@@ -205,30 +205,30 @@ export function BudgetPlanningPanel({
 
   function resetForm() {
     setShowForm(false);
-    setPlanName("");
+    setPlanCategoryId("");
+    setNewCategoryName("");
     setPlanAmount("");
     setPlanMonth(month);
     setEditingBudgetId(null);
-    setEditingCategoryId(null);
     setError(null);
   }
 
   function startNewPlan() {
-    setPlanName("");
+    setPlanCategoryId("");
+    setNewCategoryName("");
     setPlanAmount("");
     setPlanMonth(month);
     setEditingBudgetId(null);
-    setEditingCategoryId(null);
     setShowForm(true);
     setError(null);
   }
 
   function startEdit(row: (typeof rows)[number]) {
-    setPlanName(row.name);
+    setPlanCategoryId(row.category_id);
+    setNewCategoryName("");
     setPlanAmount(row.planned.toFixed(2).replace(".", ","));
     setPlanMonth(row.month.slice(0, 7));
     setEditingBudgetId(row.id);
-    setEditingCategoryId(row.category_id);
     setShowForm(true);
     setError(null);
   }
@@ -241,11 +241,16 @@ export function BudgetPlanningPanel({
       return;
     }
 
-    const name = planName.trim().replace(/\s+/g, " ");
+    const categoryName = newCategoryName.trim().replace(/\s+/g, " ");
     const amount = parseAmount(planAmount);
 
-    if (!name) {
-      setError("Informe o nome do planejamento.");
+    if (!planCategoryId) {
+      setError("Selecione a categoria que este planejamento vai controlar.");
+      return;
+    }
+
+    if (planCategoryId === "__new__" && !categoryName) {
+      setError("Informe o nome da nova categoria.");
       return;
     }
 
@@ -263,12 +268,13 @@ export function BudgetPlanningPanel({
     setError(null);
 
     try {
-      let categoryId = editingCategoryId;
+      let categoryId =
+        planCategoryId === "__new__" ? null : planCategoryId;
 
       if (!categoryId) {
         const existing = categories.find(
           (category) =>
-            category.name.localeCompare(name, "pt-BR", {
+            category.name.localeCompare(categoryName, "pt-BR", {
               sensitivity: "base",
             }) === 0,
         );
@@ -280,7 +286,7 @@ export function BudgetPlanningPanel({
             .from("pf_categories")
             .insert({
               household_id: household.id,
-              name,
+              name: categoryName,
               kind: "expense",
               group_type: "other",
               is_system: false,
@@ -293,10 +299,15 @@ export function BudgetPlanningPanel({
         }
       }
 
+      if (!categoryId) {
+        throw new Error("Não foi possível definir a categoria do planejamento.");
+      }
+
       if (editingBudgetId) {
         const updateResult = await supabase
           .from("pf_budgets")
           .update({
+            category_id: categoryId,
             amount,
             month: `${planMonth}-01`,
             updated_at: new Date().toISOString(),
@@ -376,7 +387,7 @@ export function BudgetPlanningPanel({
             </h2>
           </div>
           <p className="mt-1 max-w-2xl text-sm leading-6 text-[#3A3A3C]/60">
-            Reserve um valor para algo antes de saber o gasto final. As compras reais vão consumindo esse planejamento pela categoria.
+            Reserve um valor para uma categoria. As compras e contas dessa categoria, no mesmo mês, vão consumindo o planejamento automaticamente.
           </p>
         </div>
 
@@ -410,19 +421,29 @@ export function BudgetPlanningPanel({
           onSubmit={savePlan}
           className="mt-5 rounded-xl border border-[#C8A15A]/25 bg-[#F7F5EF] p-4"
         >
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_200px_190px_auto] lg:items-end">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(220px,1fr)_200px_190px_auto] lg:items-end">
             <label className="space-y-1.5">
               <span className="text-xs font-semibold text-[#0D1B2A]">
-                Nome do planejamento
+                Categoria do planejamento
               </span>
-              <input
-                type="text"
-                value={planName}
-                onChange={(event) => setPlanName(event.target.value)}
-                disabled={Boolean(editingBudgetId)}
-                placeholder="Ex.: Aniversário da minha filha"
-                className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-3 text-sm outline-none focus:border-[#C8A15A] disabled:bg-[#0D1B2A]/5"
-              />
+              <select
+                value={planCategoryId}
+                onChange={(event) => {
+                  setPlanCategoryId(event.target.value);
+                  if (event.target.value !== "__new__") {
+                    setNewCategoryName("");
+                  }
+                }}
+                className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-3 text-sm outline-none focus:border-[#C8A15A]"
+              >
+                <option value="">Selecione</option>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+                <option value="__new__">+ Criar nova categoria</option>
+              </select>
             </label>
             <label className="space-y-1.5">
               <span className="text-xs font-semibold text-[#0D1B2A]">
@@ -467,6 +488,24 @@ export function BudgetPlanningPanel({
               </button>
             </div>
           </div>
+
+          {planCategoryId === "__new__" && (
+            <label className="mt-3 block max-w-xl space-y-1.5">
+              <span className="text-xs font-semibold text-[#0D1B2A]">
+                Nome da nova categoria
+              </span>
+              <input
+                type="text"
+                value={newCategoryName}
+                onChange={(event) => setNewCategoryName(event.target.value)}
+                placeholder="Ex.: Aniversário da minha filha"
+                className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-3 text-sm outline-none focus:border-[#C8A15A]"
+              />
+              <span className="block text-[11px] leading-4 text-[#3A3A3C]/55">
+                As movimentações dessa categoria, no mesmo mês, consumirão este planejamento automaticamente.
+              </span>
+            </label>
+          )}
         </form>
       )}
 
@@ -570,7 +609,7 @@ export function BudgetPlanningPanel({
       )}
 
       <div className="mt-5 rounded-xl bg-[#F7F5EF] px-4 py-3 text-xs leading-5 text-[#3A3A3C]/60">
-        O planejamento pertence a <strong>{formatMonth(month)}</strong>. Ele não entra sozinho no gráfico de pizza porque ainda não é gasto. As movimentações reais ou contas a pagar registradas na mesma categoria entram no gráfico e consomem o valor planejado. Ex.: se planejou R$ 500 de gasolina, dois abastecimentos de R$ 220 e R$ 180 consomem R$ 400 e deixam R$ 100 reservados.
+        O planejamento pertence a <strong>{formatMonth(month)}</strong> e fica vinculado à categoria escolhida. Ele não entra sozinho no gráfico de pizza porque ainda não é gasto. Toda movimentação real ou conta a pagar dessa categoria, no mesmo mês, consome o planejamento. Ex.: planejou R$ 500 em Gasolina; abastecimentos de R$ 220 e R$ 180 consomem R$ 400 e deixam R$ 100 reservados.
       </div>
     </section>
   );

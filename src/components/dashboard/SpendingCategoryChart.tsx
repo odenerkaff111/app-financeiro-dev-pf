@@ -58,12 +58,34 @@ type SpendingCategoryChartProps = {
   customEnd?: string;
 };
 
+const CATEGORY_HUE_SEQUENCE = [
+  160, // verde
+  42, // dourado
+  220, // azul
+  350, // vermelho/rosa
+  285, // roxo
+  25, // laranja
+  190, // ciano
+  95, // verde-lima
+  320, // magenta
+  65, // amarelo-lima
+  205, // azul-ciano
+  8, // vermelho-laranja
+  255, // indigo
+  125, // verde
+  335, // rosa
+  55, // amarelo
+];
+
 function categoryColor(index: number) {
-  // Golden-angle spacing avoids repeated colors even with custom categories.
-  // Saturation/lightness also alternate to keep neighboring slices legible.
-  const hue = Math.round((index * 137.508 + 8) % 360);
-  const saturation = 66 + (index % 3) * 7;
-  const lightness = 38 + (Math.floor(index / 3) % 3) * 7;
+  // A ordem alterna familias de cor. Assim fatias vizinhas nao ficam
+  // com tres verdes/azuis semelhantes em sequencia. Ciclos posteriores
+  // recebem pequenas variacoes para nunca repetir a mesma cor exata.
+  const cycle = Math.floor(index / CATEGORY_HUE_SEQUENCE.length);
+  const baseHue = CATEGORY_HUE_SEQUENCE[index % CATEGORY_HUE_SEQUENCE.length];
+  const hue = (baseHue + cycle * 11) % 360;
+  const saturation = 68 + (cycle % 3) * 5;
+  const lightness = 39 + (cycle % 4) * 4;
   return `hsl(${hue} ${saturation}% ${lightness}%)`;
 }
 
@@ -186,6 +208,7 @@ export function SpendingCategoryChart({
   const [commitments, setCommitments] = useState<PayableCommitment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [legendExpanded, setLegendExpanded] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -291,30 +314,31 @@ export function SpendingCategoryChart({
     customEnd,
   ]);
 
-  const colorByCategory = useMemo(() => {
-    const names = chartData
-      .map((item) => item.name)
-      .slice()
-      .sort((first, second) => first.localeCompare(second, "pt-BR"));
+  const colorByCategory = useMemo(
+    () =>
+      new Map(
+        chartData.map((item, index) => [
+          item.name,
+          categoryColor(index),
+        ]),
+      ),
+    [chartData],
+  );
 
-    return new Map(
-      names.map((name, index) => [
-        name,
-        categoryColor(index),
-      ]),
-    );
-  }, [chartData]);
+  const legendData = legendExpanded
+    ? chartData
+    : chartData.slice(0, 8);
 
   if (loading) {
     return (
-      <article className="flex h-full min-h-[500px] items-center justify-center rounded-2xl border border-[#0D1B2A]/10 bg-white shadow-sm">
+      <article className="flex h-full min-h-[430px] items-center justify-center rounded-2xl border border-[#0D1B2A]/10 bg-white shadow-sm">
         <Loader2 className="h-6 w-6 animate-spin text-[#C8A15A]" />
       </article>
     );
   }
 
   return (
-    <article className="flex h-full min-h-[500px] flex-col rounded-2xl border border-[#0D1B2A]/10 bg-white p-5 shadow-sm">
+    <article className="flex h-full min-h-[430px] flex-col rounded-2xl border border-[#0D1B2A]/10 bg-white p-5 shadow-sm">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-xl font-semibold tracking-tight text-[#0D1B2A]">
@@ -339,15 +363,15 @@ export function SpendingCategoryChart({
           Nenhum gasto ou compromisso encontrado no período.
         </div>
       ) : (
-        <>
-          <div className="mt-4 h-52 min-w-0">
-            <ResponsiveContainer width="100%" height="100%">
+        <div className="mt-5 grid min-w-0 gap-5 lg:grid-cols-[minmax(220px,0.9fr)_minmax(260px,1.1fr)] lg:items-center">
+          <div className="h-60 min-h-0 min-w-0 sm:h-64">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
               <PieChart>
                 <Pie
                   data={chartData}
                   dataKey="value"
-                  innerRadius={54}
-                  outerRadius={78}
+                  innerRadius={58}
+                  outerRadius={88}
                   paddingAngle={2}
                   stroke="none"
                 >
@@ -372,30 +396,49 @@ export function SpendingCategoryChart({
             </ResponsiveContainer>
           </div>
 
-          <div className="mt-4 space-y-3">
-            {chartData.map((category) => (
-              <div
-                key={category.name}
-                className="flex items-center justify-between gap-4 text-sm"
-              >
-                <div className="flex min-w-0 items-center gap-2">
-                  <span
-                    className="h-2.5 w-2.5 shrink-0 rounded-full"
-                    style={{
-                      backgroundColor: colorByCategory.get(category.name),
-                    }}
-                  />
-                  <span className="truncate text-[#3A3A3C]/70">
-                    {category.name}
+          <div className="min-w-0">
+            <div
+              className={[
+                "space-y-2.5 pr-1",
+                legendExpanded ? "max-h-72 overflow-y-auto" : "",
+              ].join(" ")}
+            >
+              {legendData.map((category) => (
+                <div
+                  key={category.name}
+                  className="flex items-center justify-between gap-4 text-sm"
+                >
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span
+                      className="h-2.5 w-2.5 shrink-0 rounded-full"
+                      style={{
+                        backgroundColor: colorByCategory.get(category.name),
+                      }}
+                    />
+                    <span className="truncate text-[#3A3A3C]/70">
+                      {category.name}
+                    </span>
+                  </div>
+                  <span className="shrink-0 font-semibold text-[#0D1B2A]">
+                    {formatCurrency(category.value)}
                   </span>
                 </div>
-                <span className="shrink-0 font-semibold text-[#0D1B2A]">
-                  {formatCurrency(category.value)}
-                </span>
-              </div>
-            ))}
+              ))}
+            </div>
+
+            {chartData.length > 8 && (
+              <button
+                type="button"
+                onClick={() => setLegendExpanded((current) => !current)}
+                className="mt-3 text-xs font-semibold text-[#0D1B2A] underline decoration-[#C8A15A]/60 underline-offset-4"
+              >
+                {legendExpanded
+                  ? "Ver menos"
+                  : `Ver mais (${chartData.length - 8})`}
+              </button>
+            )}
           </div>
-        </>
+        </div>
       )}
     </article>
   );

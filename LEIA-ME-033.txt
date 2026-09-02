@@ -1,0 +1,18 @@
+AJUSTE 033 - GRAFICO + CATEGORIA NO PLANEJAMENTO
+
+1. Grafico de gastos:
+- layout desktop: pizza a esquerda e legenda a direita;
+- mostra 8 categorias inicialmente e oferece Ver mais;
+- legenda expandida tem rolagem para o card nao crescer indefinidamente;
+- cores sao atribuidas pela ordem das fatias e alternam familias de cor;
+- tons semelhantes nao ficam deliberadamente em sequencia;
+- cores exatas nao se repetem nos ciclos seguintes.
+
+2. Planejamento mensal:
+- categoria passa a ser escolhida explicitamente;
+- permite criar uma nova categoria pelo proprio planejamento;
+- o consumo do planejamento continua sendo categoria + mes;
+- nao cria movimentacao sozinho.
+
+Nao ha migration SQL nesta atualizacao.
+Validacao: TypeScript tsc --noEmit OK.
