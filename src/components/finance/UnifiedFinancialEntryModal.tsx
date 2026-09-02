@@ -25,6 +25,7 @@ import {
 } from "react";
 import { useHousehold } from "@/contexts/HouseholdContext";
 import { supabase } from "@/lib/supabase";
+import { KyraSelect } from "@/components/ui/KyraSelect";
 import {
   formatCurrency,
   parsePtBrAmount,
@@ -65,6 +66,7 @@ type Category = {
 type Budget = {
   id: string;
   category_id: string;
+  name: string;
   month: string;
   amount: number | string;
 };
@@ -79,6 +81,7 @@ type FormState = {
   accountId: string;
   destinationAccountId: string;
   categoryId: string;
+  budgetId: string;
   date: string;
   dueDate: string;
   status: "paid" | "planned";
@@ -182,6 +185,7 @@ function emptyForm(kind: EntryKind = "expense"): FormState {
     accountId: "",
     destinationAccountId: "",
     categoryId: "",
+    budgetId: "",
     date: currentDate,
     dueDate: currentDate,
     status: "paid",
@@ -268,7 +272,7 @@ export function UnifiedFinancialEntryModal({
           .order("name"),
         supabase
           .from("pf_budgets")
-          .select("id, category_id, month, amount")
+          .select("id, category_id, name, month, amount")
           .eq("household_id", household.id),
         supabase
           .from("pf_debt_positions")
@@ -391,8 +395,8 @@ export function UnifiedFinancialEntryModal({
     [categories, form.categoryId],
   );
 
-  const selectedPlanning = useMemo(() => {
-    if (form.kind !== "expense" || !form.categoryId) return null;
+  const availablePlannings = useMemo(() => {
+    if (form.kind !== "expense" || !form.categoryId) return [];
 
     const referenceDate = form.isInstallmentPurchase
       ? form.installmentFirstDueDate
@@ -400,15 +404,13 @@ export function UnifiedFinancialEntryModal({
         ? form.dueDate || form.date
         : form.date;
 
-    if (!referenceDate || referenceDate.length < 7) return null;
+    if (!referenceDate || referenceDate.length < 7) return [];
     const referenceMonth = referenceDate.slice(0, 7);
 
-    return (
-      budgets.find(
-        (budget) =>
-          budget.category_id === form.categoryId &&
-          budget.month.slice(0, 7) === referenceMonth,
-      ) ?? null
+    return budgets.filter(
+      (budget) =>
+        budget.category_id === form.categoryId &&
+        budget.month.slice(0, 7) === referenceMonth,
     );
   }, [
     budgets,
@@ -420,6 +422,20 @@ export function UnifiedFinancialEntryModal({
     form.kind,
     form.status,
   ]);
+
+  useEffect(() => {
+    if (form.kind !== "expense") return;
+
+    if (availablePlannings.length === 1 && !form.budgetId) {
+      update("budgetId", availablePlannings[0].id);
+      return;
+    }
+
+    if (form.budgetId && !availablePlannings.some((plan) => plan.id === form.budgetId)) {
+      update("budgetId", "");
+    }
+  }, [availablePlannings, form.budgetId, form.kind]);
+
 
   const isDebtExpenseCategory =
     form.kind === "expense" &&
@@ -710,7 +726,10 @@ export function UnifiedFinancialEntryModal({
     if (requiresDestination && form.accountId === form.destinationAccountId) {
       throw new Error("Origem e destino precisam ser diferentes.");
     }
-    if (["income", "expense"].includes(form.kind) && !form.categoryId) {
+    if (
+      ["income", "expense", "investment_contribution"].includes(form.kind) &&
+      !form.categoryId
+    ) {
       throw new Error("Selecione uma categoria.");
     }
 
@@ -787,7 +806,9 @@ export function UnifiedFinancialEntryModal({
         : null;
 
     const effectiveDueDate =
-      (form.kind === "income" || form.kind === "expense") &&
+      (form.kind === "income" ||
+        form.kind === "expense" ||
+        form.kind === "investment_contribution") &&
       form.status === "planned"
         ? form.dueDate || form.date
         : null;
@@ -807,6 +828,7 @@ export function UnifiedFinancialEntryModal({
       account_id: form.accountId || null,
       destination_account_id: destinationAccountId,
       category_id: form.categoryId || null,
+      budget_id: form.kind === "expense" ? form.budgetId || null : null,
       created_by: userId,
       responsible_user_id: userId,
       type: form.kind,
@@ -1187,22 +1209,19 @@ export function UnifiedFinancialEntryModal({
                   <span className="text-sm font-medium text-[#0D1B2A]">
                     Tipo do registro
                   </span>
-                  <select
+                  <KyraSelect
                     value={isPrimaryKind ? form.kind : ""}
-                    onChange={(event) =>
-                      changeKind(event.target.value as EntryKind)
+                    onChange={(value) => changeKind(value as EntryKind)}
+                    placeholder={
+                      isPrimaryKind ? "Selecione" : "Registro avançado selecionado"
                     }
-                    className="h-12 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-4 text-sm outline-none focus:border-[#C8A15A]"
-                  >
-                    {!isPrimaryKind && (
-                      <option value="">Registro avançado selecionado</option>
-                    )}
-                    {primaryOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
+                    options={primaryOptions.map((option) => ({
+                      value: option.value,
+                      label: option.label,
+                    }))}
+                    ariaLabel="Tipo do registro"
+                    className="h-12"
+                  />
                 </label>
 
                 <details className="rounded-xl border border-[#0D1B2A]/8 bg-white/60 px-4 py-3">
@@ -1288,12 +1307,15 @@ export function UnifiedFinancialEntryModal({
                           required
                         />
                         {(form.kind === "income" ||
+                          form.kind === "investment_contribution" ||
                           (form.kind === "expense" && !form.isInstallmentPurchase)) && (
                           <SelectField
                             label={
                               form.kind === "expense"
                                 ? "Status do pagamento"
-                                : "Status do recebimento"
+                                : form.kind === "investment_contribution"
+                                  ? "Status do investimento"
+                                  : "Status do recebimento"
                             }
                             value={form.status}
                             onChange={(value) =>
@@ -1305,10 +1327,15 @@ export function UnifiedFinancialEntryModal({
                                     { value: "paid", label: "Pago" },
                                     { value: "planned", label: "A pagar" },
                                   ]
-                                : [
-                                    { value: "paid", label: "Recebido" },
-                                    { value: "planned", label: "A receber" },
-                                  ]
+                                : form.kind === "investment_contribution"
+                                  ? [
+                                      { value: "paid", label: "Já investido" },
+                                      { value: "planned", label: "A investir" },
+                                    ]
+                                  : [
+                                      { value: "paid", label: "Recebido" },
+                                      { value: "planned", label: "A receber" },
+                                    ]
                             }
                           />
                         )}
@@ -1503,9 +1530,23 @@ export function UnifiedFinancialEntryModal({
                               emptyLabel="Selecione"
                             />
 
-                            {selectedPlanning && (
-                              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-xs leading-5 text-emerald-800">
-                                Vinculado automaticamente ao planejamento <strong>{selectedCategory?.name}</strong> deste mês ({formatCurrency(selectedPlanning.amount)} planejados). O vínculo é feito pela categoria + mês; cada gasto registrado nessa categoria consome o mesmo planejamento.
+                            {availablePlannings.length > 0 && form.kind === "expense" && (
+                              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+                                <SelectField
+                                  label="Planejamento relacionado"
+                                  value={form.budgetId}
+                                  onChange={(value) => update("budgetId", value)}
+                                  options={availablePlannings.map((plan) => ({
+                                    value: plan.id,
+                                    label: `${plan.name} · ${formatCurrency(plan.amount)}`,
+                                  }))}
+                                  emptyLabel="Não vincular"
+                                />
+                                <p className="mt-2 text-[11px] leading-4 text-emerald-800/80">
+                                  {availablePlannings.length === 1
+                                    ? "Este planejamento foi selecionado automaticamente porque é o único desta categoria no mês."
+                                    : "Há mais de um planejamento nesta categoria. Escolha qual deles este gasto deve consumir."}
+                                </p>
                               </div>
                             )}
 
@@ -1582,14 +1623,18 @@ export function UnifiedFinancialEntryModal({
                             )}
                           </div>
                         )}
-                        {(form.kind === "expense" || form.kind === "income") ? (
+                        {(form.kind === "expense" ||
+                          form.kind === "income" ||
+                          form.kind === "investment_contribution") ? (
                           form.kind === "expense" && form.isInstallmentPurchase ? null :
                           form.status === "planned" ? (
                             <DateField
                               label={
                                 form.kind === "expense"
                                   ? "Vencimento"
-                                  : "Data prevista do recebimento"
+                                  : form.kind === "investment_contribution"
+                                    ? "Data prevista do investimento"
+                                    : "Data prevista do recebimento"
                               }
                               value={form.dueDate}
                               onChange={(value) => update("dueDate", value)}
@@ -1599,7 +1644,9 @@ export function UnifiedFinancialEntryModal({
                               label={
                                 form.kind === "expense"
                                   ? "Data do pagamento"
-                                  : "Data do recebimento"
+                                  : form.kind === "investment_contribution"
+                                    ? "Data do investimento"
+                                    : "Data do recebimento"
                               }
                               value={form.date}
                               onChange={(value) => update("date", value)}
@@ -2187,18 +2234,13 @@ function SelectField({
   return (
     <label className="block space-y-2">
       <span className="text-sm font-medium text-[#0D1B2A]">{label}</span>
-      <select
+      <KyraSelect
         value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-4 text-sm outline-none focus:border-[#C8A15A]"
-      >
-        {emptyLabel && <option value="">{emptyLabel}</option>}
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
+        onChange={onChange}
+        options={options}
+        placeholder={emptyLabel ?? "Selecione"}
+        ariaLabel={label}
+      />
     </label>
   );
 }
@@ -2302,20 +2344,17 @@ function AccountSelect({
   return (
     <label className="block space-y-2">
       <span className="text-sm font-medium text-[#0D1B2A]">{label}</span>
-      <select
+      <KyraSelect
         value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-4 text-sm outline-none focus:border-[#C8A15A]"
-      >
-        <option value="">{optional ? "Opcional" : "Selecione"}</option>
-        {accounts.map((account) => (
-          <option key={account.id} value={account.id}>
-            {account.name}
-            {account.institution_name ? ` · ${account.institution_name}` : ""}
-            {` — ${formatCurrency(account.balance)}`}
-          </option>
-        ))}
-      </select>
+        onChange={onChange}
+        placeholder={optional ? "Opcional" : "Selecione"}
+        ariaLabel={label}
+        options={accounts.map((account) => ({
+          value: account.id,
+          label: `${account.name}${account.institution_name ? ` · ${account.institution_name}` : ""}`,
+          description: formatCurrency(account.balance),
+        }))}
+      />
     </label>
   );
 }

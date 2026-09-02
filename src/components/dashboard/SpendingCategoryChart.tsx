@@ -297,7 +297,10 @@ export function SpendingCategoryChart({
       );
 
     if (openBills > 0) {
-      totals.set("Contas abertas", openBills);
+      totals.set(
+        "Despesas",
+        (totals.get("Despesas") ?? 0) + openBills,
+      );
     }
 
     return Array.from(totals.entries())
@@ -340,7 +343,7 @@ export function SpendingCategoryChart({
             Gastos e compromissos
           </h2>
           <p className="mt-1 text-sm leading-6 text-[#3A3A3C]/60">
-            O que saiu ou está comprometido {PERIOD_LABELS[periodFilter]}.
+            Visão consolidada entre despesas do dia a dia e dívidas {PERIOD_LABELS[periodFilter]}.
           </p>
         </div>
         <WalletCards
@@ -358,7 +361,7 @@ export function SpendingCategoryChart({
           Nenhum gasto ou compromisso encontrado no período.
         </div>
       ) : (
-        <div className="mt-4 grid min-w-0 gap-4 md:grid-cols-[minmax(210px,0.85fr)_minmax(300px,1.15fr)] md:items-center">
+        <div className="mt-5 grid min-w-0 gap-6 md:grid-cols-[minmax(240px,1fr)_minmax(220px,0.85fr)] md:items-center">
           <div className="h-56 min-h-0 min-w-0 sm:h-60">
             <ResponsiveContainer width="100%" height="100%" minWidth={0}>
               <PieChart>
@@ -391,12 +394,12 @@ export function SpendingCategoryChart({
             </ResponsiveContainer>
           </div>
 
-          <div className="min-w-0">
-            <div className="grid gap-x-5 gap-y-1.5 sm:grid-cols-2 md:grid-cols-1 xl:grid-cols-2">
+          <div className="flex min-w-0 items-center justify-center">
+            <div className="w-full max-w-sm space-y-3">
               {chartData.map((category) => (
                 <div
                   key={category.name}
-                  className="flex min-w-0 items-center justify-between gap-2 text-[11px] leading-5 sm:text-xs"
+                  className="flex min-w-0 items-center justify-between gap-3 text-xs leading-5"
                 >
                   <div className="flex min-w-0 items-center gap-1.5">
                     <span

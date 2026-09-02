@@ -18,6 +18,7 @@ import {
 } from "react";
 import { supabase } from "@/lib/supabase";
 import { useHousehold } from "@/contexts/HouseholdContext";
+import { KyraSelect } from "@/components/ui/KyraSelect";
 
 type Category = {
   id: string;
@@ -27,12 +28,14 @@ type Category = {
 type Budget = {
   id: string;
   category_id: string;
+  name: string;
   month: string;
   amount: number | string;
 };
 
 type ExpenseTransaction = {
   category_id: string | null;
+  budget_id: string | null;
   status: "paid" | "planned" | "overdue" | "cancelled";
   amount: number | string;
   occurred_on: string;
@@ -96,6 +99,7 @@ export function BudgetPlanningPanel({
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [planCategoryId, setPlanCategoryId] = useState("");
+  const [planName, setPlanName] = useState("");
   const [newCategoryName, setNewCategoryName] = useState("");
   const [planAmount, setPlanAmount] = useState("");
   const [planMonth, setPlanMonth] = useState(defaultMonth);
@@ -124,12 +128,12 @@ export function BudgetPlanningPanel({
           .order("name"),
         supabase
           .from("pf_budgets")
-          .select("id, category_id, month, amount")
+          .select("id, category_id, name, month, amount")
           .eq("household_id", household.id)
           .eq("month", `${month}-01`),
         supabase
           .from("pf_transactions")
-          .select("category_id, status, amount, occurred_on, due_date")
+          .select("category_id, budget_id, status, amount, occurred_on, due_date")
           .eq("household_id", household.id)
           .eq("type", "expense")
           .eq("status", "paid"),
@@ -156,35 +160,50 @@ export function BudgetPlanningPanel({
 
   const rows = useMemo(() => {
     const categoryMap = new Map(categories.map((category) => [category.id, category]));
-    const committedByCategory = new Map<string, number>();
+    const budgetsByCategory = new Map<string, Budget[]>();
+    const committedByBudget = new Map<string, number>();
+
+    budgets.forEach((budget) => {
+      const current = budgetsByCategory.get(budget.category_id) ?? [];
+      current.push(budget);
+      budgetsByCategory.set(budget.category_id, current);
+    });
 
     transactions.forEach((transaction) => {
-      if (!transaction.category_id || transaction.status === "cancelled") return;
+      if (!transaction.category_id || transaction.status !== "paid") return;
+      if (monthKey(transaction.occurred_on) !== month) return;
 
-      const referenceDate = transaction.occurred_on;
+      let budgetId = transaction.budget_id;
 
-      if (monthKey(referenceDate) !== month) return;
+      if (!budgetId) {
+        const categoryBudgets = budgetsByCategory.get(transaction.category_id) ?? [];
+        if (categoryBudgets.length === 1) {
+          budgetId = categoryBudgets[0].id;
+        }
+      }
 
-      committedByCategory.set(
-        transaction.category_id,
-        (committedByCategory.get(transaction.category_id) ?? 0) +
-          Number(transaction.amount || 0),
+      if (!budgetId) return;
+
+      committedByBudget.set(
+        budgetId,
+        (committedByBudget.get(budgetId) ?? 0) + Number(transaction.amount || 0),
       );
     });
 
     return budgets
       .map((budget) => {
         const planned = Number(budget.amount || 0);
-        const committed = committedByCategory.get(budget.category_id) ?? 0;
+        const committed = committedByBudget.get(budget.id) ?? 0;
         return {
           ...budget,
-          name: categoryMap.get(budget.category_id)?.name ?? "Categoria removida",
+          planName: budget.name,
+          categoryName: categoryMap.get(budget.category_id)?.name ?? "Categoria removida",
           planned,
           committed,
           remaining: planned - committed,
         };
       })
-      .sort((first, second) => first.name.localeCompare(second.name, "pt-BR"));
+      .sort((first, second) => first.planName.localeCompare(second.planName, "pt-BR"));
   }, [budgets, categories, transactions, month]);
 
   const summary = useMemo(() => {
@@ -203,6 +222,7 @@ export function BudgetPlanningPanel({
   function resetForm() {
     setShowForm(false);
     setPlanCategoryId("");
+    setPlanName("");
     setNewCategoryName("");
     setPlanAmount("");
     setPlanMonth(month);
@@ -212,6 +232,7 @@ export function BudgetPlanningPanel({
 
   function startNewPlan() {
     setPlanCategoryId("");
+    setPlanName("");
     setNewCategoryName("");
     setPlanAmount("");
     setPlanMonth(month);
@@ -222,6 +243,7 @@ export function BudgetPlanningPanel({
 
   function startEdit(row: (typeof rows)[number]) {
     setPlanCategoryId(row.category_id);
+    setPlanName(row.planName);
     setNewCategoryName("");
     setPlanAmount(row.planned.toFixed(2).replace(".", ","));
     setPlanMonth(row.month.slice(0, 7));
@@ -239,7 +261,13 @@ export function BudgetPlanningPanel({
     }
 
     const categoryName = newCategoryName.trim().replace(/\s+/g, " ");
+    const normalizedPlanName = planName.trim().replace(/\s+/g, " ");
     const amount = parseAmount(planAmount);
+
+    if (!normalizedPlanName) {
+      setError("Informe um nome para o planejamento.");
+      return;
+    }
 
     if (!planCategoryId) {
       setError("Selecione a categoria que este planejamento vai controlar.");
@@ -305,6 +333,7 @@ export function BudgetPlanningPanel({
           .from("pf_budgets")
           .update({
             category_id: categoryId,
+            name: normalizedPlanName,
             amount,
             month: `${planMonth}-01`,
             updated_at: new Date().toISOString(),
@@ -318,11 +347,12 @@ export function BudgetPlanningPanel({
           {
             household_id: household.id,
             category_id: categoryId,
+            name: normalizedPlanName,
             month: `${planMonth}-01`,
             amount,
             updated_at: new Date().toISOString(),
           },
-          { onConflict: "household_id,category_id,month" },
+          { onConflict: "household_id,category_id,month,name" },
         );
 
         if (budgetResult.error) throw budgetResult.error;
@@ -349,7 +379,7 @@ export function BudgetPlanningPanel({
       return;
     }
 
-    if (!window.confirm(`Excluir o planejamento "${row.name}" deste mês?`)) {
+    if (!window.confirm(`Excluir o planejamento "${row.planName}" deste mês?`)) {
       return;
     }
 
@@ -418,29 +448,45 @@ export function BudgetPlanningPanel({
           onSubmit={savePlan}
           className="mt-5 rounded-xl border border-[#C8A15A]/25 bg-[#F7F5EF] p-4"
         >
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(220px,1fr)_200px_190px_auto] lg:items-end">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(190px,0.9fr)_minmax(220px,1.1fr)_180px_180px_auto] lg:items-end">
+            <label className="space-y-1.5">
+              <span className="text-xs font-semibold text-[#0D1B2A]">
+                Nome do planejamento
+              </span>
+              <input
+                type="text"
+                value={planName}
+                onChange={(event) => setPlanName(event.target.value)}
+                placeholder="Ex.: Roupa"
+                className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-3 text-sm outline-none focus:border-[#C8A15A]"
+              />
+            </label>
             <label className="space-y-1.5">
               <span className="text-xs font-semibold text-[#0D1B2A]">
                 Categoria do planejamento
               </span>
-              <select
+              <KyraSelect
                 value={planCategoryId}
-                onChange={(event) => {
-                  setPlanCategoryId(event.target.value);
-                  if (event.target.value !== "__new__") {
+                onChange={(value) => {
+                  setPlanCategoryId(value);
+                  if (value !== "__new__") {
                     setNewCategoryName("");
                   }
                 }}
-                className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-3 text-sm outline-none focus:border-[#C8A15A]"
-              >
-                <option value="">Selecione</option>
-                {categories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
-                <option value="__new__">+ Criar nova categoria</option>
-              </select>
+                placeholder="Selecione uma categoria"
+                options={[
+                  ...categories.map((category) => ({
+                    value: category.id,
+                    label: category.name,
+                  })),
+                  {
+                    value: "__new__",
+                    label: "+ Criar nova categoria",
+                    description: "Crie uma categoria específica para este planejamento.",
+                  },
+                ]}
+                ariaLabel="Categoria do planejamento"
+              />
             </label>
             <label className="space-y-1.5">
               <span className="text-xs font-semibold text-[#0D1B2A]">
@@ -560,7 +606,8 @@ export function BudgetPlanningPanel({
                 className="grid grid-cols-1 gap-3 py-4 first:pt-0 last:pb-0 lg:grid-cols-[1.4fr_repeat(3,minmax(120px,0.7fr))_auto] lg:items-center"
               >
                 <div>
-                  <p className="font-semibold text-[#0D1B2A]">{row.name}</p>
+                  <p className="font-semibold text-[#0D1B2A]">{row.planName}</p>
+                  <p className="mt-0.5 text-xs text-[#3A3A3C]/50">{row.categoryName}</p>
                   <div className="mt-2 h-1.5 max-w-xs overflow-hidden rounded-full bg-[#0D1B2A]/8">
                     <div
                       className={[
@@ -606,7 +653,7 @@ export function BudgetPlanningPanel({
       )}
 
       <div className="mt-5 rounded-xl bg-[#F7F5EF] px-4 py-3 text-xs leading-5 text-[#3A3A3C]/60">
-        O planejamento pertence a <strong>{formatMonth(month)}</strong> e fica vinculado à categoria escolhida. Ele não entra sozinho no gráfico de pizza porque ainda não é gasto. Somente movimentações efetivamente pagas dessa categoria, no mesmo mês, consomem o planejamento. Uma conta apenas A pagar ainda não reduz a reserva. Ex.: planejou R$ 500 em Gasolina; depois de pagar abastecimentos de R$ 220 e R$ 180, ficam R$ 100 reservados.
+        O planejamento pertence a <strong>{formatMonth(month)}</strong> e possui nome + categoria. Ao registrar uma despesa paga, o Kyra permite vinculá-la ao planejamento correto. Quando existe apenas um planejamento daquela categoria no mês, o vínculo é automático. Uma conta apenas A pagar ainda não reduz a reserva.
       </div>
     </section>
   );

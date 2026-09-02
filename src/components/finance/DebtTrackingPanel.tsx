@@ -15,11 +15,13 @@ import {
 import {
   useCallback,
   useEffect,
+  useMemo,
   useState,
   type FormEvent,
 } from "react";
 import { useHousehold } from "@/contexts/HouseholdContext";
 import { supabase } from "@/lib/supabase";
+import { KyraSelect } from "@/components/ui/KyraSelect";
 import {
   formatCurrency,
   getInterestPeriodLabel,
@@ -56,6 +58,8 @@ type DebtProgress = {
   overdue_days: number;
   start_date: string | null;
   due_date: string | null;
+  baseline_paid_installments?: number | null;
+  baseline_paid_amount?: number | string | null;
 };
 
 type Account = {
@@ -95,11 +99,10 @@ type PaymentForm = {
 
 type NewDebtForm = {
   creditor: string;
-  description: string;
   originalAmount: string;
   installmentAmount: string;
-  accountId: string;
-  startDate: string;
+  paidInstallments: string;
+  totalInstallments: string;
   dueDate: string;
   interestEnabled: boolean;
   interestRate: string;
@@ -136,17 +139,44 @@ function parseAmount(value: string) {
 function emptyNewDebtForm(): NewDebtForm {
   return {
     creditor: "",
-    description: "",
     originalAmount: "",
     installmentAmount: "",
-    accountId: "",
-    startDate: today(),
+    paidInstallments: "0",
+    totalInstallments: "",
     dueDate: today(),
     interestEnabled: false,
     interestRate: "",
     interestPeriod: "monthly",
     interestMethod: "simple",
   };
+}
+
+function parseInstallmentCount(value: string) {
+  if (!value.trim()) return 0;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) ? parsed : Number.NaN;
+}
+
+function calculateHistoricalPaidAmount(
+  originalAmount: number,
+  installmentAmount: number,
+  paidInstallments: number,
+  totalInstallments: number,
+) {
+  if (paidInstallments <= 0 || originalAmount <= 0) return 0;
+
+  if (installmentAmount > 0) {
+    return Math.min(originalAmount, installmentAmount * paidInstallments);
+  }
+
+  if (totalInstallments > 0) {
+    return Math.min(
+      originalAmount,
+      (originalAmount * paidInstallments) / totalInstallments,
+    );
+  }
+
+  return 0;
 }
 
 function clampPercentage(value: number | string) {
@@ -255,10 +285,7 @@ export function DebtTrackingPanel({
 
   function openNewDebt() {
     setEditingDebt(null);
-    setNewDebtForm({
-      ...emptyNewDebtForm(),
-      accountId: accounts[0]?.id ?? "",
-    });
+    setNewDebtForm(emptyNewDebtForm());
     setError(null);
     setShowNewDebt(true);
   }
@@ -267,14 +294,15 @@ export function DebtTrackingPanel({
     setEditingDebt(debt);
     setNewDebtForm({
       creditor: debt.creditor,
-      description: debt.description ?? "",
       originalAmount: toNumber(debt.original_amount).toFixed(2).replace(".", ","),
       installmentAmount:
         toNumber(debt.installment_amount) > 0
           ? toNumber(debt.installment_amount).toFixed(2).replace(".", ",")
           : "",
-      accountId: "",
-      startDate: debt.start_date ?? today(),
+      paidInstallments: String(debt.baseline_paid_installments ?? 0),
+      totalInstallments: debt.total_installments
+        ? String(debt.total_installments)
+        : "",
       dueDate: debt.due_date ?? today(),
       interestEnabled: debt.interest_enabled,
       interestRate: debt.interest_enabled
@@ -326,6 +354,8 @@ export function DebtTrackingPanel({
     const installmentAmount = newDebtForm.installmentAmount.trim()
       ? parseAmount(newDebtForm.installmentAmount)
       : 0;
+    const paidInstallments = parseInstallmentCount(newDebtForm.paidInstallments);
+    const totalInstallments = parseInstallmentCount(newDebtForm.totalInstallments);
     const interestRate = newDebtForm.interestEnabled
       ? parseAmount(newDebtForm.interestRate || "0")
       : 0;
@@ -341,17 +371,32 @@ export function DebtTrackingPanel({
     }
 
     if (!Number.isFinite(installmentAmount) || installmentAmount < 0) {
-      setError("Informe uma mensalidade válida.");
+      setError("Informe um valor de parcela válido.");
       return;
     }
 
-    if (!newDebtForm.accountId) {
-      setError("Selecione a conta prevista para o pagamento.");
+    if (!Number.isFinite(paidInstallments) || paidInstallments < 0) {
+      setError("Informe corretamente quantas parcelas já foram pagas.");
+      return;
+    }
+
+    if (!Number.isFinite(totalInstallments) || totalInstallments < 0) {
+      setError("Informe corretamente o total de parcelas.");
+      return;
+    }
+
+    if (totalInstallments > 0 && paidInstallments > totalInstallments) {
+      setError("As parcelas pagas não podem ser maiores que o total de parcelas.");
+      return;
+    }
+
+    if (paidInstallments > 0 && installmentAmount <= 0 && totalInstallments <= 0) {
+      setError("Para registrar parcelas já pagas, informe o valor da parcela ou o total de parcelas.");
       return;
     }
 
     if (!newDebtForm.dueDate) {
-      setError("Informe o próximo vencimento.");
+      setError("Informe o próximo vencimento da parcela.");
       return;
     }
 
@@ -360,26 +405,35 @@ export function DebtTrackingPanel({
       return;
     }
 
+    const historicalPaidAmount = calculateHistoricalPaidAmount(
+      originalAmount,
+      installmentAmount,
+      paidInstallments,
+      totalInstallments,
+    );
+
+    if (historicalPaidAmount >= originalAmount - 0.005) {
+      setError("Pelas parcelas informadas, essa dívida já estaria quitada. Revise os valores.");
+      return;
+    }
+
     setSaving(true);
     setError(null);
 
-    const result = await supabase.rpc("pf_create_debt_obligation_v1", {
+    const result = await supabase.rpc("pf_create_debt_obligation_v2", {
       target_household_id: household.id,
-      obligation_account_id: newDebtForm.accountId,
       debt_creditor: creditor,
-      debt_description:
-        newDebtForm.description.trim() || `Dívida com ${creditor}`,
       debt_original_amount: originalAmount,
       target_debt_group: group,
-      debt_start_date: newDebtForm.startDate,
       debt_due_date: newDebtForm.dueDate,
       debt_installment_amount: installmentAmount > 0 ? installmentAmount : null,
+      debt_total_installments: totalInstallments > 0 ? totalInstallments : null,
+      debt_baseline_paid_installments: paidInstallments,
       debt_interest_enabled: newDebtForm.interestEnabled,
       debt_auto_accrue_interest: newDebtForm.interestEnabled,
       debt_interest_rate: interestRate,
       debt_interest_period: newDebtForm.interestPeriod,
       debt_interest_method: newDebtForm.interestMethod,
-      obligation_notes: null,
     });
 
     if (result.error) {
@@ -410,6 +464,8 @@ export function DebtTrackingPanel({
     const installmentAmount = newDebtForm.installmentAmount.trim()
       ? parseAmount(newDebtForm.installmentAmount)
       : 0;
+    const baselinePaidInstallments = parseInstallmentCount(newDebtForm.paidInstallments);
+    const totalInstallments = parseInstallmentCount(newDebtForm.totalInstallments);
     const interestRate = newDebtForm.interestEnabled
       ? parseAmount(newDebtForm.interestRate || "0")
       : 0;
@@ -423,11 +479,23 @@ export function DebtTrackingPanel({
       return;
     }
     if (!Number.isFinite(installmentAmount) || installmentAmount < 0) {
-      setError("Informe uma mensalidade válida.");
+      setError("Informe um valor de parcela válido.");
+      return;
+    }
+    if (!Number.isFinite(baselinePaidInstallments) || baselinePaidInstallments < 0) {
+      setError("Informe corretamente as parcelas pagas antes do controle.");
+      return;
+    }
+    if (!Number.isFinite(totalInstallments) || totalInstallments < 0) {
+      setError("Informe corretamente o total de parcelas.");
+      return;
+    }
+    if (totalInstallments > 0 && baselinePaidInstallments > totalInstallments) {
+      setError("As parcelas pagas não podem ser maiores que o total de parcelas.");
       return;
     }
     if (!newDebtForm.dueDate) {
-      setError("Informe o próximo vencimento.");
+      setError("Informe o próximo vencimento da parcela.");
       return;
     }
     if (newDebtForm.interestEnabled && (!Number.isFinite(interestRate) || interestRate < 0)) {
@@ -438,14 +506,14 @@ export function DebtTrackingPanel({
     setSaving(true);
     setError(null);
 
-    const result = await supabase.rpc("pf_update_debt_v1", {
+    const result = await supabase.rpc("pf_update_debt_v2", {
       target_debt_id: editingDebt.id,
       debt_creditor: creditor,
-      debt_description: newDebtForm.description.trim(),
       debt_original_amount: originalAmount,
-      debt_start_date: newDebtForm.startDate,
       debt_due_date: newDebtForm.dueDate,
       debt_installment_amount: installmentAmount > 0 ? installmentAmount : null,
+      debt_total_installments: totalInstallments > 0 ? totalInstallments : null,
+      debt_baseline_paid_installments: baselinePaidInstallments,
       debt_interest_enabled: newDebtForm.interestEnabled,
       debt_auto_accrue_interest: newDebtForm.interestEnabled,
       debt_interest_rate: interestRate,
@@ -559,7 +627,7 @@ export function DebtTrackingPanel({
       accountId: accounts[0]?.id ?? "",
       amount: suggested > 0 ? suggested.toFixed(2).replace(".", ",") : "",
       date: today(),
-      countInstallment: false,
+      countInstallment: debt.total_installments !== null,
       notes: "",
     });
     setError(null);
@@ -611,6 +679,31 @@ export function DebtTrackingPanel({
     window.localStorage.setItem("pf:financial-data-version", String(Date.now()));
     window.dispatchEvent(new Event("pf:financial-data-changed"));
   }
+
+  const newDebtPreview = useMemo(() => {
+    const originalAmount = parseAmount(newDebtForm.originalAmount);
+    const installmentAmount = newDebtForm.installmentAmount.trim()
+      ? parseAmount(newDebtForm.installmentAmount)
+      : 0;
+    const paidInstallments = parseInstallmentCount(newDebtForm.paidInstallments);
+    const totalInstallments = parseInstallmentCount(newDebtForm.totalInstallments);
+
+    if (!Number.isFinite(originalAmount) || originalAmount <= 0) {
+      return null;
+    }
+
+    const historicalPaid = calculateHistoricalPaidAmount(
+      originalAmount,
+      Number.isFinite(installmentAmount) ? installmentAmount : 0,
+      Number.isFinite(paidInstallments) ? paidInstallments : 0,
+      Number.isFinite(totalInstallments) ? totalInstallments : 0,
+    );
+
+    return {
+      historicalPaid,
+      remaining: Math.max(originalAmount - historicalPaid, 0),
+    };
+  }, [newDebtForm.originalAmount, newDebtForm.installmentAmount, newDebtForm.paidInstallments, newDebtForm.totalInstallments]);
 
   return (
     <div className="space-y-6 pb-10">
@@ -865,10 +958,10 @@ export function DebtTrackingPanel({
       )}
 
       {showNewDebt && (
-        <div className="fixed inset-0 z-[300] overflow-y-auto bg-[#0D1B2A]/60 backdrop-blur-sm">
-          <div className="flex min-h-full items-center justify-center p-4 py-24">
-            <div className="w-full max-w-2xl rounded-3xl border border-[#C8A15A]/20 bg-[#F7F5EF] shadow-2xl">
-              <div className="flex items-start justify-between border-b border-[#0D1B2A]/10 px-6 py-5">
+        <div className="fixed inset-0 z-[700] overflow-hidden bg-[#0D1B2A]/60 p-2 backdrop-blur-sm sm:p-6">
+          <div className="flex h-full min-h-0 items-center justify-center">
+            <div className="flex max-h-[calc(100dvh-1rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-[#C8A15A]/20 bg-[#F7F5EF] shadow-2xl sm:max-h-[calc(100dvh-3rem)] sm:rounded-3xl">
+              <div className="relative z-10 flex shrink-0 items-start justify-between gap-4 border-b border-[#0D1B2A]/10 bg-[#F7F5EF] px-5 py-4 sm:px-6 sm:py-5">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#C8A15A]">
                     {group === "personal" ? "Dívida pessoal" : "Outra dívida"}
@@ -877,130 +970,146 @@ export function DebtTrackingPanel({
                     {editingDebt ? "Editar dívida" : "Nova dívida"}
                   </h2>
                   <p className="mt-1 text-sm text-[#3A3A3C]/60">
-                    {editingDebt
-                      ? "Altere os dados da dívida. O lançamento vinculado em A pagar será atualizado junto."
-                      : "Cadastre o saldo que você deve. Pagamentos serão registrados depois, sem duplicar a dívida."}
+                    Informe a situação que você conhece hoje. Parcelas já pagas entram apenas como histórico e não retiram dinheiro das suas contas.
                   </p>
                 </div>
                 <button
                   type="button"
-                  onClick={() => { if (!saving) { setShowNewDebt(false); setEditingDebt(null); } }}
-                  className="rounded-full p-2 text-[#3A3A3C]/60 hover:bg-white"
+                  onClick={() => {
+                    if (!saving) {
+                      setShowNewDebt(false);
+                      setEditingDebt(null);
+                    }
+                  }}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#0D1B2A]/8 bg-white text-[#3A3A3C]/60 transition hover:border-[#C8A15A]/40 hover:text-[#0D1B2A]"
                   aria-label="Fechar"
                 >
                   <X size={20} />
                 </button>
               </div>
 
-              <form onSubmit={editingDebt ? updateDebt : createDebt} className="space-y-4 px-6 py-6">
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium">Para quem você deve?</span>
-                  <input
-                    required
-                    value={newDebtForm.creditor}
-                    onChange={(event) =>
-                      setNewDebtForm((current) => ({
-                        ...current,
-                        creditor: event.target.value,
-                      }))
-                    }
-                    placeholder={group === "personal" ? "Ex.: Vanda" : "Ex.: Banco Santander"}
-                    className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-4 text-sm outline-none focus:border-[#C8A15A]"
-                  />
-                </label>
-
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium">Descrição <span className="font-normal text-[#3A3A3C]/45">(opcional)</span></span>
-                  <input
-                    value={newDebtForm.description}
-                    onChange={(event) =>
-                      setNewDebtForm((current) => ({
-                        ...current,
-                        description: event.target.value,
-                      }))
-                    }
-                    placeholder="Ex.: empréstimo pessoal"
-                    className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-4 text-sm outline-none focus:border-[#C8A15A]"
-                  />
-                </label>
-
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <form
+                onSubmit={editingDebt ? updateDebt : createDebt}
+                className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6 sm:py-6"
+              >
+                <div className="space-y-5">
                   <label className="block space-y-2">
-                    <span className="text-sm font-medium">Valor total</span>
-                    <input
-                      required
-                      inputMode="decimal"
-                      value={newDebtForm.originalAmount}
-                      onChange={(event) =>
-                        setNewDebtForm((current) => ({
-                          ...current,
-                          originalAmount: event.target.value,
-                        }))
-                      }
-                      placeholder="0,00"
-                      className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-4 text-sm outline-none focus:border-[#C8A15A]"
-                    />
-                  </label>
-
-                  <label className="block space-y-2">
-                    <span className="text-sm font-medium">Valor da mensalidade <span className="font-normal text-[#3A3A3C]/45">(opcional)</span></span>
-                    <input
-                      inputMode="decimal"
-                      value={newDebtForm.installmentAmount}
-                      onChange={(event) =>
-                        setNewDebtForm((current) => ({
-                          ...current,
-                          installmentAmount: event.target.value,
-                        }))
-                      }
-                      placeholder="0,00"
-                      className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-4 text-sm outline-none focus:border-[#C8A15A]"
-                    />
-                  </label>
-
-{!editingDebt && (
-                  <label className="block space-y-2 sm:col-span-2">
-                    <span className="text-sm font-medium">Conta prevista para pagamento</span>
-                    <select
-                      required
-                      value={newDebtForm.accountId}
-                      onChange={(event) =>
-                        setNewDebtForm((current) => ({
-                          ...current,
-                          accountId: event.target.value,
-                        }))
-                      }
-                      className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-4 text-sm outline-none focus:border-[#C8A15A]"
-                    >
-                      <option value="">Selecione</option>
-                      {accounts.map((account) => (
-                        <option key={account.id} value={account.id}>{account.name}</option>
-                      ))}
-                    </select>
-                    <span className="block text-[11px] leading-4 text-[#3A3A3C]/45">
-                      Define a conta da próxima obrigação exibida em A pagar.
+                    <span className="text-sm font-medium text-[#0D1B2A]">
+                      Para quem você deve?
                     </span>
+                    <input
+                      required
+                      value={newDebtForm.creditor}
+                      onChange={(event) =>
+                        setNewDebtForm((current) => ({
+                          ...current,
+                          creditor: event.target.value,
+                        }))
+                      }
+                      placeholder={group === "personal" ? "Ex.: Samuel" : "Ex.: Banco Santander"}
+                      className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-4 text-sm outline-none transition focus:border-[#C8A15A] focus:ring-2 focus:ring-[#C8A15A]/15"
+                    />
                   </label>
+
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <label className="block space-y-2">
+                      <span className="text-sm font-medium text-[#0D1B2A]">Valor total da dívida</span>
+                      <input
+                        required
+                        inputMode="decimal"
+                        value={newDebtForm.originalAmount}
+                        onChange={(event) =>
+                          setNewDebtForm((current) => ({
+                            ...current,
+                            originalAmount: event.target.value,
+                          }))
+                        }
+                        placeholder="0,00"
+                        className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-4 text-sm outline-none transition focus:border-[#C8A15A] focus:ring-2 focus:ring-[#C8A15A]/15"
+                      />
+                    </label>
+
+                    <label className="block space-y-2">
+                      <span className="text-sm font-medium text-[#0D1B2A]">Valor da parcela</span>
+                      <input
+                        inputMode="decimal"
+                        value={newDebtForm.installmentAmount}
+                        onChange={(event) =>
+                          setNewDebtForm((current) => ({
+                            ...current,
+                            installmentAmount: event.target.value,
+                          }))
+                        }
+                        placeholder="0,00"
+                        className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-4 text-sm outline-none transition focus:border-[#C8A15A] focus:ring-2 focus:ring-[#C8A15A]/15"
+                      />
+                    </label>
+
+                    <label className="block space-y-2">
+                      <span className="text-sm font-medium text-[#0D1B2A]">Parcelas já pagas</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={newDebtForm.paidInstallments}
+                        onChange={(event) =>
+                          setNewDebtForm((current) => ({
+                            ...current,
+                            paidInstallments: event.target.value,
+                          }))
+                        }
+                        placeholder="0"
+                        className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-4 text-sm outline-none transition focus:border-[#C8A15A] focus:ring-2 focus:ring-[#C8A15A]/15"
+                      />
+                      <span className="block text-[11px] leading-4 text-[#3A3A3C]/50">
+                        Use para registrar o histórico anterior ao Kyra. Esse valor não altera nenhuma conta bancária.
+                      </span>
+                    </label>
+
+                    <label className="block space-y-2">
+                      <span className="text-sm font-medium text-[#0D1B2A]">Total de parcelas</span>
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={newDebtForm.totalInstallments}
+                        onChange={(event) =>
+                          setNewDebtForm((current) => ({
+                            ...current,
+                            totalInstallments: event.target.value,
+                          }))
+                        }
+                        placeholder="Ex.: 12"
+                        className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-4 text-sm outline-none transition focus:border-[#C8A15A] focus:ring-2 focus:ring-[#C8A15A]/15"
+                      />
+                    </label>
+                  </div>
+
+                  {newDebtPreview && (
+                    <div className="grid grid-cols-1 gap-3 rounded-2xl border border-[#C8A15A]/20 bg-[#FFF9EC] p-4 sm:grid-cols-2">
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#7A5A20]/65">
+                          Já pago antes do controle
+                        </p>
+                        <p className="mt-1 text-base font-semibold text-[#0D1B2A]">
+                          {formatCurrency(newDebtPreview.historicalPaid)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#7A5A20]/65">
+                          Saldo inicial no Kyra
+                        </p>
+                        <p className="mt-1 text-base font-semibold text-[#0D1B2A]">
+                          {formatCurrency(newDebtPreview.remaining)}
+                        </p>
+                      </div>
+                    </div>
                   )}
 
-                  <label className="block space-y-2">
-                    <span className="text-sm font-medium">Data inicial</span>
-                    <input
-                      required
-                      type="date"
-                      value={newDebtForm.startDate}
-                      onChange={(event) =>
-                        setNewDebtForm((current) => ({
-                          ...current,
-                          startDate: event.target.value,
-                        }))
-                      }
-                      className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-4 text-sm outline-none"
-                    />
-                  </label>
-
-                  <label className="block space-y-2">
-                    <span className="text-sm font-medium">Próximo vencimento</span>
+                  <label className="block space-y-2 sm:max-w-sm">
+                    <span className="text-sm font-medium text-[#0D1B2A]">
+                      Próximo vencimento da parcela
+                    </span>
                     <input
                       required
                       type="date"
@@ -1011,107 +1120,117 @@ export function DebtTrackingPanel({
                           dueDate: event.target.value,
                         }))
                       }
-                      className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-4 text-sm outline-none"
+                      className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-4 text-sm outline-none transition focus:border-[#C8A15A] focus:ring-2 focus:ring-[#C8A15A]/15"
                     />
                   </label>
-                </div>
 
-                <label className="flex items-center gap-3 rounded-xl border border-[#0D1B2A]/10 bg-white p-4">
-                  <input
-                    type="checkbox"
-                    checked={newDebtForm.interestEnabled}
-                    onChange={(event) =>
-                      setNewDebtForm((current) => ({
-                        ...current,
-                        interestEnabled: event.target.checked,
-                      }))
-                    }
-                    className="h-5 w-5 accent-[#0D1B2A]"
-                  />
-                  <div>
-                    <p className="text-sm font-medium">Esta dívida possui juros</p>
-                    <p className="mt-0.5 text-xs text-[#3A3A3C]/50">
-                      O saldo será atualizado automaticamente conforme a taxa informada.
-                    </p>
-                  </div>
-                </label>
+                  <label className="flex cursor-pointer items-center gap-3 rounded-2xl border border-[#0D1B2A]/10 bg-white p-4">
+                    <input
+                      type="checkbox"
+                      checked={newDebtForm.interestEnabled}
+                      onChange={(event) =>
+                        setNewDebtForm((current) => ({
+                          ...current,
+                          interestEnabled: event.target.checked,
+                        }))
+                      }
+                      className="h-5 w-5 accent-[#0D1B2A]"
+                    />
+                    <div>
+                      <p className="text-sm font-medium text-[#0D1B2A]">Esta dívida possui juros</p>
+                      <p className="mt-0.5 text-xs text-[#3A3A3C]/50">
+                        O saldo será atualizado automaticamente conforme a taxa informada a partir do controle atual.
+                      </p>
+                    </div>
+                  </label>
 
-                {newDebtForm.interestEnabled && (
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                    <label className="block space-y-2">
-                      <span className="text-sm font-medium">Taxa (%)</span>
-                      <input
-                        required
-                        inputMode="decimal"
-                        value={newDebtForm.interestRate}
-                        onChange={(event) =>
-                          setNewDebtForm((current) => ({
-                            ...current,
-                            interestRate: event.target.value,
-                          }))
-                        }
-                        placeholder="1,00"
-                        className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-4 text-sm outline-none"
-                      />
-                    </label>
+                  {newDebtForm.interestEnabled && (
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                      <label className="block space-y-2">
+                        <span className="text-sm font-medium text-[#0D1B2A]">Taxa (%)</span>
+                        <input
+                          required
+                          inputMode="decimal"
+                          value={newDebtForm.interestRate}
+                          onChange={(event) =>
+                            setNewDebtForm((current) => ({
+                              ...current,
+                              interestRate: event.target.value,
+                            }))
+                          }
+                          placeholder="1,00"
+                          className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-4 text-sm outline-none transition focus:border-[#C8A15A] focus:ring-2 focus:ring-[#C8A15A]/15"
+                        />
+                      </label>
 
-                    <label className="block space-y-2">
-                      <span className="text-sm font-medium">Período</span>
-                      <select
-                        value={newDebtForm.interestPeriod}
-                        onChange={(event) =>
-                          setNewDebtForm((current) => ({
-                            ...current,
-                            interestPeriod: event.target.value as NewDebtForm["interestPeriod"],
-                          }))
-                        }
-                        className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-4 text-sm outline-none"
-                      >
-                        <option value="daily">ao dia</option>
-                        <option value="monthly">ao mês</option>
-                        <option value="yearly">ao ano</option>
-                      </select>
-                    </label>
+                      <label className="block space-y-2">
+                        <span className="text-sm font-medium text-[#0D1B2A]">Período</span>
+                        <KyraSelect
+                          value={newDebtForm.interestPeriod}
+                          onChange={(value) =>
+                            setNewDebtForm((current) => ({
+                              ...current,
+                              interestPeriod: value as NewDebtForm["interestPeriod"],
+                            }))
+                          }
+                          ariaLabel="Período dos juros"
+                          options={[
+                            { value: "daily", label: "Ao dia" },
+                            { value: "monthly", label: "Ao mês" },
+                            { value: "yearly", label: "Ao ano" },
+                          ]}
+                        />
+                      </label>
 
-                    <label className="block space-y-2">
-                      <span className="text-sm font-medium">Cálculo</span>
-                      <select
-                        value={newDebtForm.interestMethod}
-                        onChange={(event) =>
-                          setNewDebtForm((current) => ({
-                            ...current,
-                            interestMethod: event.target.value as NewDebtForm["interestMethod"],
-                          }))
-                        }
-                        className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-4 text-sm outline-none"
-                      >
-                        <option value="simple">Juros simples</option>
-                        <option value="compound">Juros compostos</option>
-                      </select>
-                    </label>
-                  </div>
-                )}
-
-                {error && (
-                  <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                    {error}
-                  </p>
-                )}
-
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#0D1B2A] text-sm font-semibold text-white disabled:opacity-60"
-                >
-                  {saving ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : editingDebt ? (
-                    <Pencil size={16} />
-                  ) : (
-                    <Plus size={16} />
+                      <label className="block space-y-2">
+                        <span className="text-sm font-medium text-[#0D1B2A]">Cálculo</span>
+                        <KyraSelect
+                          value={newDebtForm.interestMethod}
+                          onChange={(value) =>
+                            setNewDebtForm((current) => ({
+                              ...current,
+                              interestMethod: value as NewDebtForm["interestMethod"],
+                            }))
+                          }
+                          ariaLabel="Método de cálculo dos juros"
+                          options={[
+                            {
+                              value: "simple",
+                              label: "Juros simples",
+                              description: "Calcula a taxa sobre o saldo-base.",
+                            },
+                            {
+                              value: "compound",
+                              label: "Juros compostos",
+                              description: "Juros acumulados passam a compor a base.",
+                            },
+                          ]}
+                        />
+                      </label>
+                    </div>
                   )}
-                  {editingDebt ? "Salvar alterações" : "Cadastrar dívida"}
-                </button>
+
+                  {error && (
+                    <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                      {error}
+                    </p>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#0D1B2A] text-sm font-semibold text-white transition hover:bg-[#172D43] disabled:opacity-60"
+                  >
+                    {saving ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : editingDebt ? (
+                      <Pencil size={16} />
+                    ) : (
+                      <Plus size={16} />
+                    )}
+                    {editingDebt ? "Salvar alterações" : "Cadastrar dívida"}
+                  </button>
+                </div>
               </form>
             </div>
           </div>
@@ -1333,24 +1452,22 @@ export function DebtTrackingPanel({
               <form onSubmit={registerPayment} className="space-y-4 px-6 py-6">
                 <label className="block space-y-2">
                   <span className="text-sm font-medium">Conta usada no pagamento</span>
-                  <select
-                    required
+                  <KyraSelect
                     value={paymentForm.accountId}
-                    onChange={(event) =>
+                    onChange={(value) =>
                       setPaymentForm((current) => ({
                         ...current,
-                        accountId: event.target.value,
+                        accountId: value,
                       }))
                     }
-                    className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-4 text-sm outline-none"
-                  >
-                    <option value="">Selecione</option>
-                    {accounts.map((account) => (
-                      <option key={account.id} value={account.id}>
-                        {account.name} — {formatCurrency(account.balance)}
-                      </option>
-                    ))}
-                  </select>
+                    placeholder="Selecione"
+                    ariaLabel="Conta usada no pagamento"
+                    options={accounts.map((account) => ({
+                      value: account.id,
+                      label: account.name,
+                      description: formatCurrency(account.balance),
+                    }))}
+                  />
                 </label>
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -1401,9 +1518,9 @@ export function DebtTrackingPanel({
                       className="h-5 w-5 accent-[#0D1B2A]"
                     />
                     <div>
-                      <p className="text-sm font-medium">Contar como parcela completa</p>
+                      <p className="text-sm font-medium">Encerrar parcela deste mês</p>
                       <p className="mt-0.5 text-xs text-[#3A3A3C]/50">
-                        Marque apenas quando este pagamento quitar uma parcela inteira.
+                        Pode ser marcado mesmo com pagamento parcial. O valor que faltar permanece somente no saldo total da dívida e não é somado à parcela seguinte.
                       </p>
                     </div>
                   </label>

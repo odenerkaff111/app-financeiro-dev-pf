@@ -1,0 +1,18 @@
+AJUSTE 035 - UX DE MODAIS, PLANEJAMENTOS E DIVIDAS
+
+Inclui:
+- modal de movimentacao com cabecalho/fechar sempre acessivel em 100% de zoom;
+- abas Movimentacoes / Recorrentes / Planejamentos;
+- Dashboard mantem apenas indicadores de planejamento;
+- nova tela de gestao de planejamentos;
+- cadastro de divida simplificado: credor, valor total, valor da parcela,
+  parcelas ja pagas, total de parcelas, proximo vencimento e juros;
+- parcelas historicas reduzem a divida sem alterar contas bancarias;
+- nova RPC v2 para criacao/edicao de divida sem exigir conta;
+- seletores customizados no estilo Kyra em fluxos principais.
+
+IMPORTANTE:
+1. Extraia este ZIP na raiz do projeto.
+2. Rode a migration 035 inteira no Supabase SQL Editor.
+3. Rode: npx tsc --noEmit
+4. Rode: npm run dev

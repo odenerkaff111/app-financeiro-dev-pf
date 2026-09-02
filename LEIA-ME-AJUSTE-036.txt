@@ -1,0 +1,16 @@
+Atualizacao 036 - Dashboard, dividas, planejamentos e recorrencias
+
+Inclui:
+- pagamento parcial encerrando a parcela mensal sem carregar diferenca para a proxima parcela;
+- Proximas obrigacoes recolhivel, acima da projecao, com paginacao;
+- grafico de gastos consolidado em Despesas e Dividas;
+- exclusao de ocorrencia recorrente sem ela ser recriada;
+- planejamento com nome + categoria + mes e vinculo explicito com movimentacao;
+- investimento com status Ja investido / A investir;
+- visao anual com valores de gastos positivos e diferenca descrita como Sobram/Faltam;
+- geracao das recorrencias dos meses futuros do ano selecionado.
+
+IMPORTANTE:
+1. Extraia este ZIP na raiz do projeto.
+2. Rode a migration 036 no Supabase antes de testar o frontend.
+3. Depois limpe .next e execute npx tsc --noEmit e npm run dev.

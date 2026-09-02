@@ -4,7 +4,10 @@ import {
   AlertCircle,
   CalendarClock,
   CheckCircle2,
+  ChevronDown,
+  ChevronLeft,
   ChevronRight,
+  ChevronUp,
   Loader2,
   ReceiptText,
   WalletCards,
@@ -120,6 +123,8 @@ export function UpcomingObligations() {
   const [saving, setSaving] = useState(false);
   const [essentialSaving, setEssentialSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [page, setPage] = useState(1);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -134,8 +139,7 @@ export function UpcomingObligations() {
           ascending: true,
           nullsFirst: false,
         })
-        .order("created_at", { ascending: true })
-        .limit(12),
+        .order("created_at", { ascending: true }),
       supabase
         .from("pf_accounts")
         .select(
@@ -193,6 +197,19 @@ export function UpcomingObligations() {
       { payable: 0, receivable: 0, overdue: 0 },
     );
   }, [obligations]);
+
+
+  const pageSize = 8;
+  const totalPages = Math.max(1, Math.ceil(obligations.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const pagedObligations = useMemo(
+    () =>
+      obligations.slice(
+        (safePage - 1) * pageSize,
+        safePage * pageSize,
+      ),
+    [obligations, safePage],
+  );
 
   function openObligation(obligation: Obligation) {
     const defaultAccount =
@@ -389,38 +406,38 @@ export function UpcomingObligations() {
   return (
     <>
       <section className="rounded-2xl border border-[#0D1B2A]/10 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="flex items-center gap-2">
-              <CalendarClock
-                size={19}
-                className="text-[#C8A15A]"
-              />
+              <CalendarClock size={19} className="text-[#C8A15A]" />
               <h2 className="text-xl font-semibold tracking-tight text-[#0D1B2A]">
                 Próximas obrigações
               </h2>
             </div>
             <p className="mt-1 text-sm text-[#3A3A3C]/60">
-              Contas a pagar e valores a receber que exigem atenção.
+              {obligations.length} pendência{obligations.length === 1 ? "" : "s"} entre contas a pagar e valores a receber.
             </p>
           </div>
 
-          <div className="grid grid-cols-3 gap-2 text-right sm:min-w-[360px]">
-            <MiniTotal
-              label="A pagar"
-              value={totals.payable}
-              tone="negative"
-            />
-            <MiniTotal
-              label="A receber"
-              value={totals.receivable}
-              tone="positive"
-            />
-            <MiniTotal
-              label="Em atraso"
-              value={totals.overdue}
-              tone="warning"
-            />
+          <div className="flex flex-col gap-3 sm:items-end">
+            <div className="grid grid-cols-3 gap-2 text-right sm:min-w-[360px]">
+              <MiniTotal label="A pagar" value={totals.payable} tone="negative" />
+              <MiniTotal label="A receber" value={totals.receivable} tone="positive" />
+              <MiniTotal label="Em atraso" value={totals.overdue} tone="warning" />
+            </div>
+            {obligations.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setExpanded((current) => !current);
+                  setPage(1);
+                }}
+                className="inline-flex h-9 items-center gap-2 self-end rounded-xl border border-[#0D1B2A]/12 bg-[#F7F5EF] px-3 text-xs font-semibold text-[#0D1B2A] transition hover:bg-white"
+              >
+                {expanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                {expanded ? "Ocultar obrigações" : `Ver todas (${obligations.length})`}
+              </button>
+            )}
           </div>
         </div>
 
@@ -431,91 +448,81 @@ export function UpcomingObligations() {
         )}
 
         {obligations.length === 0 ? (
-          <div className="py-12 text-center">
-            <CheckCircle2
-              size={34}
-              className="mx-auto text-emerald-600"
-            />
-            <p className="mt-3 font-semibold text-[#0D1B2A]">
-              Nenhuma obrigação pendente
-            </p>
-            <p className="mt-1 text-sm text-[#3A3A3C]/55">
-              Suas próximas contas e recebimentos aparecerão aqui.
-            </p>
+          <div className="py-8 text-center">
+            <CheckCircle2 size={30} className="mx-auto text-emerald-600" />
+            <p className="mt-3 font-semibold text-[#0D1B2A]">Nenhuma obrigação pendente</p>
           </div>
-        ) : (
-          <div className="mt-5 divide-y divide-[#0D1B2A]/8">
-            {obligations.map((obligation) => {
-              const isReceivable =
-                obligation.direction === "receivable";
-
-              return (
-                <button
-                  key={`${obligation.source_type}-${obligation.source_id}`}
-                  type="button"
-                  onClick={() => openObligation(obligation)}
-                  className="group flex w-full flex-col gap-3 py-4 text-left first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div className="flex min-w-0 items-start gap-3">
-                    <span
-                      className={[
-                        "mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full",
-                        obligation.computed_status === "overdue"
-                          ? "bg-red-500"
-                          : isReceivable
-                            ? "bg-emerald-500"
-                            : "bg-amber-400",
-                      ].join(" ")}
-                    />
-                    <div className="min-w-0">
-                      <p className="truncate font-medium text-[#0D1B2A]">
-                        {obligation.description}
-                      </p>
-                      <p className="mt-1 text-xs text-[#3A3A3C]/55">
-                        {obligation.counterparty} • {isReceivable
-                          ? "A receber"
-                          : "A pagar"} • {formatDate(obligation.due_date)}
-                      </p>
-                      {obligation.direction === "payable" &&
-                        obligation.is_essential && (
-                          <span className="mt-2 inline-flex rounded-full bg-[#C8A15A]/12 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-[#8A641F]">
-                            Despesa essencial
-                          </span>
-                        )}
-                      {Number(obligation.settled_amount || 0) > 0 && (
-                        <p className="mt-1 text-xs text-[#3A3A3C]/45">
-                          Já liquidado: {formatCurrency(
-                            obligation.settled_amount,
-                          )}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between gap-4 sm:justify-end">
-                    <div className="text-right">
-                      <p
+        ) : expanded ? (
+          <>
+            <div className="mt-5 divide-y divide-[#0D1B2A]/8">
+              {pagedObligations.map((obligation) => {
+                const isReceivable = obligation.direction === "receivable";
+                return (
+                  <button
+                    key={`${obligation.source_type}-${obligation.source_id}`}
+                    type="button"
+                    onClick={() => openObligation(obligation)}
+                    className="group flex w-full flex-col gap-3 py-4 text-left first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="flex min-w-0 items-start gap-3">
+                      <span
                         className={[
-                          "font-semibold",
-                          isReceivable
-                            ? "text-emerald-700"
-                            : "text-red-700",
+                          "mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full",
+                          obligation.computed_status === "overdue"
+                            ? "bg-red-500"
+                            : isReceivable
+                              ? "bg-emerald-500"
+                              : "bg-amber-400",
                         ].join(" ")}
-                      >
-                        {formatCurrency(obligation.remaining_amount)}
-                      </p>
-                      <p className="mt-1 text-[10px] uppercase tracking-wider text-[#3A3A3C]/40">
-                        Saldo restante
-                      </p>
+                      />
+                      <div className="min-w-0">
+                        <p className="truncate font-medium text-[#0D1B2A]">{obligation.description}</p>
+                        <p className="mt-1 text-xs text-[#3A3A3C]/55">
+                          {obligation.counterparty} • {isReceivable ? "A receber" : "A pagar"} • {formatDate(obligation.due_date)}
+                        </p>
+                      </div>
                     </div>
-                    <ChevronRight
-                      size={18}
-                      className="text-[#3A3A3C]/35 transition group-hover:translate-x-0.5 group-hover:text-[#0D1B2A]"
-                    />
-                  </div>
-                </button>
-              );
-            })}
+                    <div className="flex items-center justify-between gap-4 sm:justify-end">
+                      <div className="text-right">
+                        <p className={["font-semibold", isReceivable ? "text-emerald-700" : "text-red-700"].join(" ")}>
+                          {formatCurrency(obligation.remaining_amount)}
+                        </p>
+                        <p className="mt-1 text-[10px] uppercase tracking-wider text-[#3A3A3C]/40">Saldo restante</p>
+                      </div>
+                      <ChevronRight size={18} className="text-[#3A3A3C]/35" />
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {totalPages > 1 && (
+              <div className="mt-5 flex items-center justify-between border-t border-[#0D1B2A]/8 pt-4">
+                <p className="text-xs text-[#3A3A3C]/55">Página {safePage} de {totalPages}</p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPage(Math.max(1, safePage - 1))}
+                    disabled={safePage === 1}
+                    className="inline-flex h-9 items-center gap-1 rounded-xl border border-[#0D1B2A]/12 px-3 text-xs font-semibold disabled:opacity-40"
+                  >
+                    <ChevronLeft size={14} /> Anterior
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPage(Math.min(totalPages, safePage + 1))}
+                    disabled={safePage === totalPages}
+                    className="inline-flex h-9 items-center gap-1 rounded-xl border border-[#0D1B2A]/12 px-3 text-xs font-semibold disabled:opacity-40"
+                  >
+                    Próxima <ChevronRight size={14} />
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="mt-4 rounded-xl bg-[#F7F5EF] px-4 py-3 text-xs leading-5 text-[#3A3A3C]/60">
+            A lista fica recolhida para não ocupar o Dashboard. Clique em <strong>Ver todas</strong> para abrir as obrigações e registrar pagamentos ou recebimentos.
           </div>
         )}
       </section>

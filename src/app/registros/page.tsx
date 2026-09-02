@@ -36,6 +36,7 @@ import { ptBR } from "date-fns/locale";
 import { supabase, getSessionOnce } from "@/lib/supabase";
 import { useHousehold } from "@/contexts/HouseholdContext";
 import { UnifiedFinancialEntryModal } from "@/components/finance/UnifiedFinancialEntryModal";
+import { KyraSelect } from "@/components/ui/KyraSelect";
 
 type AccountType =
   | "checking"
@@ -110,6 +111,7 @@ type Transaction = {
   installment_group_id: string | null;
   installment_number: number | null;
   installment_total: number | null;
+  recurrence_key: string | null;
   source: TransactionSource;
   notes: string | null;
   metadata: Record<string, unknown> | null;
@@ -692,6 +694,10 @@ export default function TransactionsPage() {
       const effectiveStatus =
         getEffectiveStatus(transaction);
 
+      if (statusFilter === "all" && effectiveStatus === "cancelled") {
+        return false;
+      }
+
       if (
         statusFilter !== "all" &&
         effectiveStatus !== statusFilter
@@ -1232,7 +1238,9 @@ export default function TransactionsPage() {
     }
 
     const confirmed = window.confirm(
-      `Excluir a movimentação "${selectedTransaction.description}"?`,
+      selectedTransaction.recurrence_key
+        ? `Excluir somente esta ocorrência de "${selectedTransaction.description}"? A recorrência dos próximos meses continuará ativa.`
+        : `Excluir a movimentação "${selectedTransaction.description}"?`,
     );
 
     if (!confirmed) {
@@ -1242,17 +1250,26 @@ export default function TransactionsPage() {
     setSaving(true);
     setModalError(null);
 
-    const { error } = await supabase
-      .from("pf_transactions")
-      .delete()
-      .eq(
-        "id",
-        selectedTransaction.id,
-      )
-      .eq(
-        "household_id",
-        household.id,
-      );
+    const deleteQuery = supabase
+      .from("pf_transactions");
+
+    const { error } = selectedTransaction.recurrence_key
+      ? await deleteQuery
+          .update({
+            status: "cancelled",
+            metadata: {
+              ...(selectedTransaction.metadata ?? {}),
+              cancelled_occurrence: true,
+              cancelled_at: new Date().toISOString(),
+            },
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", selectedTransaction.id)
+          .eq("household_id", household.id)
+      : await deleteQuery
+          .delete()
+          .eq("id", selectedTransaction.id)
+          .eq("household_id", household.id);
 
     if (error) {
       console.error(
@@ -1350,123 +1367,60 @@ export default function TransactionsPage() {
           />
         </div>
 
-        <select
+        <KyraSelect
           value={periodFilter}
-          onChange={(event) =>
+          onChange={(value) =>
             setPeriodFilter(
-              event.target.value as
-                | "week"
-                | "month"
-                | "next_month"
-                | "year"
-                | "custom"
-                | "all",
+              value as "week" | "month" | "next_month" | "year" | "custom" | "all",
             )
           }
-          className="h-11 rounded-xl border border-[#0D1B2A]/12 bg-white px-4 text-sm text-[#0D1B2A] outline-none"
-        >
-          <option value="week">
-            Esta semana
-          </option>
+          ariaLabel="Período"
+          options={[
+            { value: "week", label: "Esta semana" },
+            { value: "month", label: "Este mês" },
+            { value: "next_month", label: "Próximo mês" },
+            { value: "year", label: "Este ano" },
+            { value: "custom", label: "Personalizado" },
+            { value: "all", label: "Todo o histórico" },
+          ]}
+        />
 
-          <option value="month">
-            Este mês
-          </option>
-
-          <option value="next_month">
-            Próximo mês
-          </option>
-
-          <option value="year">
-            Este ano
-          </option>
-
-          <option value="custom">
-            Personalizado
-          </option>
-
-          <option value="all">
-            Todo o histórico
-          </option>
-        </select>
-
-        <select
+        <KyraSelect
           value={typeFilter}
-          onChange={(event) =>
-            setTypeFilter(
-              event.target.value as
-                | "all"
-                | TransactionType,
-            )
-          }
-          className="h-11 rounded-xl border border-[#0D1B2A]/12 bg-white px-4 text-sm text-[#0D1B2A] outline-none"
-        >
-          <option value="all">
-            Todos os tipos
-          </option>
+          onChange={(value) => setTypeFilter(value as "all" | TransactionType)}
+          ariaLabel="Tipo"
+          options={[
+            { value: "all", label: "Todos os tipos" },
+            ...TYPE_OPTIONS.map((option) => ({ value: option.value, label: option.label })),
+          ]}
+        />
 
-          {TYPE_OPTIONS.map(
-            (option) => (
-              <option
-                key={option.value}
-                value={option.value}
-              >
-                {option.label}
-              </option>
-            ),
-          )}
-        </select>
-
-        <select
+        <KyraSelect
           value={statusFilter}
-          onChange={(event) =>
-            setStatusFilter(
-              event.target.value as
-                | "all"
-                | TransactionStatus,
-            )
-          }
-          className="h-11 rounded-xl border border-[#0D1B2A]/12 bg-white px-4 text-sm text-[#0D1B2A] outline-none"
-        >
-          <option value="all">
-            Todos os status
-          </option>
+          onChange={(value) => setStatusFilter(value as "all" | TransactionStatus)}
+          ariaLabel="Status"
+          options={[
+            { value: "all", label: "Todos os status" },
+            { value: "paid", label: "Realizados" },
+            { value: "planned", label: "Planejados" },
+            { value: "overdue", label: "Atrasados" },
+            { value: "cancelled", label: "Cancelados" },
+          ]}
+        />
 
-          <option value="paid">
-            Realizados
-          </option>
-
-          <option value="planned">
-            Planejados
-          </option>
-
-          <option value="overdue">
-            Atrasados
-          </option>
-
-          <option value="cancelled">
-            Cancelados
-          </option>
-        </select>
-
-        <select
+        <KyraSelect
           value={sortMode}
-          onChange={(event) =>
-            setSortMode(
-              event.target.value as
-                | "period_desc"
-                | "period_asc"
-                | "registered_desc"
-                | "value_desc",
-            )
+          onChange={(value) =>
+            setSortMode(value as "period_desc" | "period_asc" | "registered_desc" | "value_desc")
           }
-          className="h-11 rounded-xl border border-[#0D1B2A]/12 bg-white px-4 text-sm text-[#0D1B2A] outline-none"
-        >
-          <option value="period_desc">Período: mais recente</option>
-          <option value="period_asc">Período: mais próximo</option>
-          <option value="registered_desc">Cadastro: mais recente</option>
-          <option value="value_desc">Maior valor</option>
-        </select>
+          ariaLabel="Ordenação"
+          options={[
+            { value: "period_desc", label: "Período: mais recente" },
+            { value: "period_asc", label: "Período: mais próximo" },
+            { value: "registered_desc", label: "Cadastro: mais recente" },
+            { value: "value_desc", label: "Maior valor" },
+          ]}
+        />
 
         {periodFilter === "custom" && (
           <div className="grid grid-cols-1 gap-3 rounded-xl border border-[#0D1B2A]/10 bg-[#F7F5EF] p-3 md:col-span-5 sm:grid-cols-2">
@@ -1722,10 +1676,10 @@ export default function TransactionsPage() {
       />
 
       {modalOpen && (
-        <div className="fixed inset-0 z-[120] overflow-y-auto bg-[#0D1B2A]/55 backdrop-blur-sm">
-          <div className="flex min-h-full items-start justify-center px-4 pb-28 pt-4 sm:px-6 sm:pt-8">
-            <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-[#C8A15A]/25 bg-[#F7F5EF] shadow-2xl sm:max-h-[calc(100vh-4rem)]">
-              <div className="flex shrink-0 items-start justify-between gap-4 border-b border-[#0D1B2A]/10 bg-[#F7F5EF] px-6 py-5 sm:px-8">
+        <div className="fixed inset-0 z-[700] overflow-hidden bg-[#0D1B2A]/55 p-2 backdrop-blur-sm sm:p-6">
+          <div className="flex h-full min-h-0 items-center justify-center">
+            <div className="flex max-h-[calc(100dvh-1rem)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-[#C8A15A]/25 bg-[#F7F5EF] shadow-2xl sm:max-h-[calc(100dvh-3rem)] sm:rounded-3xl">
+              <div className="relative z-10 flex shrink-0 items-start justify-between gap-4 border-b border-[#0D1B2A]/10 bg-[#F7F5EF] px-5 py-4 sm:px-8 sm:py-5">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#C8A15A]">
                     {selectedTransaction
@@ -1762,31 +1716,17 @@ export default function TransactionsPage() {
                         Tipo
                       </span>
 
-                      <select
+                      <KyraSelect
                         value={form.type}
-                        onChange={(event) =>
-                          handleTypeChange(
-                            event.target
-                              .value as TransactionType,
-                          )
+                        onChange={(value) =>
+                          handleTypeChange(value as TransactionType)
                         }
-                        className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-4 text-sm outline-none focus:border-[#C8A15A] focus:ring-2 focus:ring-[#C8A15A]/20"
-                      >
-                        {TYPE_OPTIONS.map(
-                          (option) => (
-                            <option
-                              key={
-                                option.value
-                              }
-                              value={
-                                option.value
-                              }
-                            >
-                              {option.label}
-                            </option>
-                          ),
-                        )}
-                      </select>
+                        options={TYPE_OPTIONS.map((option) => ({
+                          value: option.value,
+                          label: option.label,
+                        }))}
+                        ariaLabel="Tipo da movimentação"
+                      />
                     </label>
 
                     <label className="space-y-2">
@@ -1794,33 +1734,19 @@ export default function TransactionsPage() {
                         Status
                       </span>
 
-                      <select
+                      <KyraSelect
                         value={form.status}
-                        onChange={(event) =>
-                          updateForm(
-                            "status",
-                            event.target
-                              .value as TransactionStatus,
-                          )
+                        onChange={(value) =>
+                          updateForm("status", value as TransactionStatus)
                         }
-                        className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-4 text-sm outline-none focus:border-[#C8A15A] focus:ring-2 focus:ring-[#C8A15A]/20"
-                      >
-                        <option value="paid">
-                          Realizado
-                        </option>
-
-                        <option value="planned">
-                          Planejado
-                        </option>
-
-                        <option value="overdue">
-                          Atrasado
-                        </option>
-
-                        <option value="cancelled">
-                          Cancelado
-                        </option>
-                      </select>
+                        ariaLabel="Status da movimentação"
+                        options={[
+                          { value: "paid", label: "Realizado" },
+                          { value: "planned", label: "Planejado" },
+                          { value: "overdue", label: "Atrasado" },
+                          { value: "cancelled", label: "Cancelado" },
+                        ]}
+                      />
                     </label>
                   </div>
 
@@ -1907,39 +1833,16 @@ export default function TransactionsPage() {
                           Categoria
                         </span>
 
-                        <select
-                          value={
-                            form.category_id
-                          }
-                          onChange={(event) =>
-                            updateForm(
-                              "category_id",
-                              event.target.value,
-                            )
-                          }
-                          className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-4 text-sm outline-none focus:border-[#C8A15A] focus:ring-2 focus:ring-[#C8A15A]/20"
-                        >
-                          <option value="">
-                            Selecione
-                          </option>
-
-                          {categoryOptions.map(
-                            (category) => (
-                              <option
-                                key={
-                                  category.id
-                                }
-                                value={
-                                  category.id
-                                }
-                              >
-                                {
-                                  category.name
-                                }
-                              </option>
-                            ),
-                          )}
-                        </select>
+                        <KyraSelect
+                          value={form.category_id}
+                          onChange={(value) => updateForm("category_id", value)}
+                          placeholder="Selecione"
+                          ariaLabel="Categoria da movimentação"
+                          options={categoryOptions.map((category) => ({
+                            value: category.id,
+                            label: category.name,
+                          }))}
+                        />
                       </label>
                     )}
                   </div>
@@ -1954,51 +1857,30 @@ export default function TransactionsPage() {
                             : "Conta bancária (opcional)"}
                       </span>
 
-                      <select
-                        required={["transfer", "investment_withdrawal"].includes(form.type)}
+                      <KyraSelect
                         value={form.account_id}
-                        onChange={(event) => {
-                          const accountId =
-                            event.target.value;
-
-                          setForm(
-                            (currentForm) => ({
-                              ...currentForm,
-                              account_id:
-                                accountId,
-                              destination_account_id:
-                                currentForm.destination_account_id ===
-                                accountId
-                                  ? ""
-                                  : currentForm.destination_account_id,
-                            }),
-                          );
+                        onChange={(accountId) => {
+                          setForm((currentForm) => ({
+                            ...currentForm,
+                            account_id: accountId,
+                            destination_account_id:
+                              currentForm.destination_account_id === accountId
+                                ? ""
+                                : currentForm.destination_account_id,
+                          }));
                         }}
-                        className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-4 text-sm outline-none focus:border-[#C8A15A] focus:ring-2 focus:ring-[#C8A15A]/20"
-                      >
-                        <option value="">
-                          {["transfer", "investment_withdrawal"].includes(form.type)
+                        placeholder={
+                          ["transfer", "investment_withdrawal"].includes(form.type)
                             ? "Selecione"
-                            : "Não informada"}
-                        </option>
-
-                        {sourceAccountOptions.map(
-                          (account) => (
-                            <option
-                              key={account.id}
-                              value={
-                                account.id
-                              }
-                            >
-                              {account.name}
-                              {account.institution_name
-                                ? ` · ${account.institution_name}`
-                                : ""}
-                              {` — ${formatCurrency(account.balance)}`}
-                            </option>
-                          ),
-                        )}
-                      </select>
+                            : "Não informada"
+                        }
+                        ariaLabel="Conta da movimentação"
+                        options={sourceAccountOptions.map((account) => ({
+                          value: account.id,
+                          label: `${account.name}${account.institution_name ? ` · ${account.institution_name}` : ""}`,
+                          description: formatCurrency(account.balance),
+                        }))}
+                      />
                     </label>
 
                     {requiresDestination && (
@@ -2010,44 +1892,19 @@ export default function TransactionsPage() {
                             : "Conta de destino"}
                         </span>
 
-                        <select
-                          required
-                          value={
-                            form.destination_account_id
+                        <KyraSelect
+                          value={form.destination_account_id}
+                          onChange={(value) =>
+                            updateForm("destination_account_id", value)
                           }
-                          onChange={(event) =>
-                            updateForm(
-                              "destination_account_id",
-                              event.target.value,
-                            )
-                          }
-                          className="h-11 w-full rounded-xl border border-[#0D1B2A]/15 bg-white px-4 text-sm outline-none focus:border-[#C8A15A] focus:ring-2 focus:ring-[#C8A15A]/20"
-                        >
-                          <option value="">
-                            Selecione
-                          </option>
-
-                          {destinationAccountOptions.map(
-                            (account) => (
-                              <option
-                                key={
-                                  account.id
-                                }
-                                value={
-                                  account.id
-                                }
-                              >
-                                {
-                                  account.name
-                                }{" "}
-                                —{" "}
-                                {formatCurrency(
-                                  account.balance,
-                                )}
-                              </option>
-                            ),
-                          )}
-                        </select>
+                          placeholder="Selecione"
+                          ariaLabel="Conta de destino"
+                          options={destinationAccountOptions.map((account) => ({
+                            value: account.id,
+                            label: account.name,
+                            description: formatCurrency(account.balance),
+                          }))}
+                        />
                       </label>
                     )}
                   </div>

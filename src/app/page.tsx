@@ -44,7 +44,7 @@ import { MonthlyClosingSection } from "@/components/MonthlyClosingSection";
 import { UpcomingObligations } from "@/components/dashboard/UpcomingObligations";
 import { InvestmentOverview } from "@/components/dashboard/InvestmentOverview";
 import { CostOfLivingCard } from "@/components/dashboard/CostOfLivingCard";
-import { BudgetPlanningPanel } from "@/components/dashboard/BudgetPlanningPanel";
+import { BudgetPlanningSummary } from "@/components/dashboard/BudgetPlanningSummary";
 
 type PeriodFilter =
   | "today"
@@ -101,6 +101,7 @@ type Transaction = {
   account_id: string | null;
   destination_account_id: string | null;
   category_id: string | null;
+  budget_id: string | null;
   type: TransactionType;
   status: TransactionStatus;
   description: string;
@@ -302,19 +303,36 @@ export default function DashboardPage() {
       setLoading(true);
       setError(null);
 
-      const recurringGenerations = await Promise.all([
-        supabase.rpc("pf_generate_recurring_transactions", {
-          target_month: `${getMonthKey()}-01`,
-        }),
-        supabase.rpc("pf_generate_recurring_transactions", {
-          target_month: `${getMonthKey(1)}-01`,
-        }),
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentMonthIndex = now.getMonth();
+      const annualRecurringMonths =
+        annualYear < currentYear
+          ? []
+          : Array.from({ length: 12 }, (_, index) =>
+              `${annualYear}-${String(index + 1).padStart(2, "0")}-01`,
+            ).filter((_, index) =>
+              annualYear > currentYear || index >= currentMonthIndex,
+            );
+
+      const recurringMonths = new Set<string>([
+        `${getMonthKey()}-01`,
+        `${getMonthKey(1)}-01`,
+        ...annualRecurringMonths,
       ]);
 
-      recurringGenerations.forEach((generation, index) => {
+      const recurringGenerations = await Promise.all(
+        Array.from(recurringMonths).map((targetMonth) =>
+          supabase.rpc("pf_generate_recurring_transactions", {
+            target_month: targetMonth,
+          }),
+        ),
+      );
+
+      recurringGenerations.forEach((generation) => {
         if (generation.error) {
           console.warn(
-            `Não foi possível gerar recorrências do ${index === 0 ? "mês atual" : "próximo mês"}:`,
+            "Não foi possível gerar uma competência recorrente:",
             generation.error,
           );
         }
@@ -350,7 +368,7 @@ export default function DashboardPage() {
         supabase
           .from("pf_transactions")
           .select(
-            "id, household_id, account_id, destination_account_id, category_id, type, status, description, merchant, amount, occurred_on, due_date, paid_at",
+            "id, household_id, account_id, destination_account_id, category_id, budget_id, type, status, description, merchant, amount, occurred_on, due_date, paid_at",
           )
           .eq(
             "household_id",
@@ -446,7 +464,7 @@ export default function DashboardPage() {
 
       setLoading(false);
     },
-    [household.id],
+    [household.id, annualYear],
   );
 
   useEffect(() => {
@@ -652,7 +670,15 @@ export default function DashboardPage() {
       return 0;
     }
 
-    const committedByCategoryMonth = new Map<string, number>();
+    const budgetsByCategoryMonth = new Map<string, Budget[]>();
+    budgets.forEach((budget) => {
+      const key = `${budget.category_id}:${budget.month}`;
+      const current = budgetsByCategoryMonth.get(key) ?? [];
+      current.push(budget);
+      budgetsByCategoryMonth.set(key, current);
+    });
+
+    const committedByBudget = new Map<string, number>();
 
     transactions.forEach((transaction) => {
       if (
@@ -674,10 +700,20 @@ export default function DashboardPage() {
         return;
       }
 
-      const key = `${transaction.category_id}:${month}`;
-      committedByCategoryMonth.set(
-        key,
-        (committedByCategoryMonth.get(key) ?? 0) + Number(transaction.amount || 0),
+      let budgetId = transaction.budget_id;
+      if (!budgetId) {
+        const categoryBudgets =
+          budgetsByCategoryMonth.get(`${transaction.category_id}:${month}`) ?? [];
+        if (categoryBudgets.length === 1) {
+          budgetId = categoryBudgets[0].id;
+        }
+      }
+
+      if (!budgetId) return;
+
+      committedByBudget.set(
+        budgetId,
+        (committedByBudget.get(budgetId) ?? 0) + Number(transaction.amount || 0),
       );
     });
 
@@ -686,8 +722,7 @@ export default function DashboardPage() {
         return total;
       }
 
-      const key = `${budget.category_id}:${budget.month}`;
-      const committed = committedByCategoryMonth.get(key) ?? 0;
+      const committed = committedByBudget.get(budget.id) ?? 0;
       const remaining = Math.max(Number(budget.amount || 0) - committed, 0);
       return total + remaining;
     }, 0);
@@ -700,7 +735,8 @@ export default function DashboardPage() {
   ]);
 
   const annualYears = useMemo(() => {
-    const years = new Set<number>([new Date().getFullYear()]);
+    const currentYear = new Date().getFullYear();
+    const years = new Set<number>([currentYear, currentYear + 1]);
 
     transactions.forEach((transaction) => {
       const referenceDate =
@@ -799,17 +835,14 @@ export default function DashboardPage() {
               : null;
 
           const categoryName =
-            category?.name ??
-            "Sem categoria";
+            category?.group_type === "debt"
+              ? "Dívidas"
+              : "Despesas";
 
           categoryTotals.set(
             categoryName,
-            (categoryTotals.get(
-              categoryName,
-            ) ?? 0) +
-              Number(
-                transaction.amount || 0,
-              ),
+            (categoryTotals.get(categoryName) ?? 0) +
+              Number(transaction.amount || 0),
           );
         },
       );
@@ -1032,6 +1065,8 @@ export default function DashboardPage() {
       </section>
 
       <div className={[privateDataClass, "space-y-6"].join(" ")}>
+      <UpcomingObligations />
+
       <MonthlyClosingSection
         periodFilter={periodFilter}
         income={metrics.income}
@@ -1085,7 +1120,7 @@ export default function DashboardPage() {
             </p>
           </div>
           <div className="rounded-xl bg-[#F7F5EF] p-4">
-            <p className="text-xs text-[#3A3A3C]/60">Saldo projetado do ano</p>
+            <p className="text-xs text-[#3A3A3C]/60">Diferença projetada do ano</p>
             <p
               className={[
                 "mt-1 text-lg font-semibold",
@@ -1094,7 +1129,9 @@ export default function DashboardPage() {
                   : "text-red-800",
               ].join(" ")}
             >
-              {formatCurrency(annualTotals.income - annualTotals.expense)}
+              {annualTotals.income - annualTotals.expense >= 0
+                ? `Sobram ${formatCurrency(annualTotals.income - annualTotals.expense)}`
+                : `Faltam ${formatCurrency(Math.abs(annualTotals.income - annualTotals.expense))}`}
             </p>
           </div>
         </div>
@@ -1126,18 +1163,18 @@ export default function DashboardPage() {
             <div key={month.name} className="rounded-xl border border-[#0D1B2A]/8 bg-[#F7F5EF]/60 p-3">
               <p className="text-xs font-semibold text-[#0D1B2A]">{month.name}</p>
               <p className="mt-1 text-[11px] text-emerald-700">
-                + {formatCurrency(month.Entradas)}
+                Entradas: {formatCurrency(month.Entradas)}
               </p>
               <p className="text-[11px] text-red-700">
-                - {formatCurrency(month.Saídas)}
+                A pagar/sair: {formatCurrency(month.Saídas)}
               </p>
             </div>
           ))}
         </div>
       </section>
 
-      <BudgetPlanningPanel
-        defaultMonth={
+      <BudgetPlanningSummary
+        month={
           periodFilter === "next_month"
             ? getMonthKey(1)
             : periodFilter === "custom" && customStart
@@ -1161,7 +1198,6 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      <UpcomingObligations />
       </div>
 
       {dashboardValuesHidden && (
