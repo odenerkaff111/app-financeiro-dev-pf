@@ -1,0 +1,26 @@
+KYRA - AJUSTE 037
+
+1. CARTAO PARCELADO
+- Primeiro vencimento passa a sugerir o proximo mes.
+- Parcelas nao devem ser editadas isoladamente em Movimentacoes.
+- Nova aba: Movimentacoes > Parcelamentos.
+- Nela e possivel visualizar todas as parcelas e ajustar o primeiro vencimento do grupo inteiro.
+- A migration 037 repara grupos que ja ficaram com duas parcelas no mesmo mes.
+
+2. SEGURANCA
+- Headers HTTP de seguranca no Next/Vercel.
+- Schema financeiro bloqueado para o papel anonimo.
+- RLS garantido em todas as tabelas pf_*.
+- Novos objetos do banco nascem sem acesso anonimo por padrao.
+
+3. PASSO MANUAL OBRIGATORIO NO SUPABASE
+Authentication > General Configuration:
+- Allow new users to sign up = OFF
+- Allow anonymous sign-ins = OFF
+
+Novos usuarios continuam sendo criados pelo admin via convite.
+
+4. REPOSITORIO
+O repositorio GitHub deve ser alterado de Public para Private.
+
+Execute a migration 037 depois de extrair o ZIP.

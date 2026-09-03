@@ -172,6 +172,23 @@ function today() {
   ].join("-");
 }
 
+function nextMonthSameDay() {
+  const now = new Date();
+  const targetMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const lastDay = new Date(
+    targetMonth.getFullYear(),
+    targetMonth.getMonth() + 1,
+    0,
+  ).getDate();
+  const day = Math.min(now.getDate(), lastDay);
+
+  return [
+    targetMonth.getFullYear(),
+    String(targetMonth.getMonth() + 1).padStart(2, "0"),
+    String(day).padStart(2, "0"),
+  ].join("-");
+}
+
 function emptyForm(kind: EntryKind = "expense"): FormState {
   const currentDate = today();
 
@@ -199,7 +216,7 @@ function emptyForm(kind: EntryKind = "expense"): FormState {
     installmentCardAccountId: "",
     installmentCardHolder: "",
     installmentCardInstitution: "",
-    installmentFirstDueDate: currentDate,
+    installmentFirstDueDate: nextMonthSameDay(),
     commitmentId: "",
     debtId: "",
     debtGroup: "personal",
@@ -1427,11 +1444,16 @@ export function UnifiedFinancialEntryModal({
                                   placeholder="Ex.: 6"
                                   required
                                 />
-                                <DateField
-                                  label="Vencimento da primeira parcela"
-                                  value={form.installmentFirstDueDate}
-                                  onChange={(value) => update("installmentFirstDueDate", value)}
-                                />
+                                <div>
+                                  <DateField
+                                    label="Vencimento da primeira parcela"
+                                    value={form.installmentFirstDueDate}
+                                    onChange={(value) => update("installmentFirstDueDate", value)}
+                                  />
+                                  <p className="mt-1 text-[10px] leading-4 text-[#3A3A3C]/55">
+                                    Informe quando a primeira parcela entra na fatura. Uma compra feita hoje pode começar somente no próximo mês.
+                                  </p>
+                                </div>
                                 <SelectField
                                   label="De quem é o cartão?"
                                   value={form.installmentCardMode}

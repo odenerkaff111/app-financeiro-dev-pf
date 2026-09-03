@@ -928,6 +928,13 @@ export default function TransactionsPage() {
   function openEditModal(
     transaction: Transaction,
   ) {
+    if (transaction.installment_group_id) {
+      setPageError(
+        "Esta movimentação faz parte de uma compra parcelada. Ajuste vencimentos e consulte o grupo pela aba Parcelamentos.",
+      );
+      return;
+    }
+
     if (
       transaction.debt_id ||
       ["debt_payment", "debt_received"].includes(String(transaction.type)) ||
