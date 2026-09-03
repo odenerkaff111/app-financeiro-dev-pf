@@ -835,9 +835,10 @@ export default function DashboardPage() {
               : null;
 
           const categoryName =
-            category?.group_type === "debt"
+            category?.name?.trim() ||
+            (category?.group_type === "debt"
               ? "Dívidas"
-              : "Despesas";
+              : "Sem categoria");
 
           categoryTotals.set(
             categoryName,

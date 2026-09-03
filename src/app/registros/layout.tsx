@@ -11,14 +11,19 @@ export default function RegistrosLayout({
 }) {
   const pathname = usePathname();
 
+  const statementActive = pathname === "/registros/extrato";
   const recurringActive = pathname === "/registros/recorrentes";
   const installmentsActive = pathname === "/registros/parcelamentos";
   const planningActive = pathname === "/registros/planejamentos";
   const movementsActive =
-    !recurringActive && !installmentsActive && !planningActive;
+    !statementActive &&
+    !recurringActive &&
+    !installmentsActive &&
+    !planningActive;
 
   const tabs = [
     { href: "/registros", label: "Movimentações", active: movementsActive },
+    { href: "/registros/extrato", label: "Extrato", active: statementActive },
     { href: "/registros/recorrentes", label: "Recorrentes", active: recurringActive },
     { href: "/registros/parcelamentos", label: "Parcelamentos", active: installmentsActive },
     { href: "/registros/planejamentos", label: "Planejamentos", active: planningActive },

@@ -1,0 +1,29 @@
+AJUSTE 038 - GRAFICO POR CATEGORIA + EXTRATO
+
+Arquivos alterados:
+- src/app/page.tsx
+- src/components/dashboard/SpendingCategoryChart.tsx
+- src/app/registros/layout.tsx
+- src/app/registros/extrato/page.tsx (novo)
+
+Nao existe migration nova nesta atualizacao.
+
+Principais mudancas:
+1. Gastos e compromissos volta a usar as categorias reais.
+2. Legenda mostra somente cor + nome; valores apenas no hover.
+3. Legenda mostra 8 categorias inicialmente e pode ser expandida.
+4. Card nao estica para acompanhar a altura de Investimentos.
+5. Nova aba Movimentacoes > Extrato.
+6. Extrato mostra compras no cartao na data da compra, uma unica vez pelo valor total.
+7. Compra no cartao tem impacto de caixa R$ 0 no dia; pagamento futuro aparece como saida real.
+8. Extrato permite Hoje, Este mes, Personalizado e Tudo.
+9. Extrato pode ser baixado em CSV (Excel/Google Sheets).
+
+Instalacao:
+1. Parar npm run dev.
+2. Extrair o ZIP na raiz do projeto com -Force.
+3. Remover .next.
+4. Rodar npx tsc --noEmit.
+5. Rodar npm run dev.
+
+Nao rode SQL no Supabase para esta atualizacao.
