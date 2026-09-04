@@ -1,0 +1,19 @@
+AJUSTE - PLANEJAMENTO EXPLICITO
+
+O que muda:
+- Nenhuma despesa entra em planejamento apenas por compartilhar a categoria.
+- Ao existir planejamento compatível, o cadastro mostra uma escolha explicita:
+  "Nao - deixar fora do planejamento" ou "Sim - <nome do planejamento>".
+- Trocar a categoria limpa um planejamento selecionado anteriormente.
+- Dashboard e tela de Planejamentos contam apenas despesas PAGAS com budget_id explicito.
+
+Nao ha migration nem SQL novo.
+
+Instalacao:
+1. Extraia este ZIP na raiz do projeto.
+2. Rode no PowerShell:
+   powershell -ExecutionPolicy Bypass -File .\aplicar-ajuste-planejamento-explicito.ps1
+3. Depois:
+   Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue
+   npx tsc --noEmit
+   npm run dev

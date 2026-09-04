@@ -104,25 +104,11 @@ export function BudgetPlanningSummary({ month }: Props) {
   }, [load]);
 
   const summary = useMemo(() => {
-    const budgetsByCategory = new Map<string, Budget[]>();
-    budgets.forEach((budget) => {
-      const current = budgetsByCategory.get(budget.category_id) ?? [];
-      current.push(budget);
-      budgetsByCategory.set(budget.category_id, current);
-    });
-
     const usedByBudget = new Map<string, number>();
     transactions.forEach((transaction) => {
       if (!transaction.category_id) return;
 
-      let budgetId = transaction.budget_id;
-      if (!budgetId) {
-        const categoryBudgets = budgetsByCategory.get(transaction.category_id) ?? [];
-        if (categoryBudgets.length === 1) {
-          budgetId = categoryBudgets[0].id;
-        }
-      }
-
+      const budgetId = transaction.budget_id;
       if (!budgetId) return;
       usedByBudget.set(
         budgetId,

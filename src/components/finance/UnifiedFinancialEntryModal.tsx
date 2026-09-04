@@ -443,12 +443,10 @@ export function UnifiedFinancialEntryModal({
   useEffect(() => {
     if (form.kind !== "expense") return;
 
-    if (availablePlannings.length === 1 && !form.budgetId) {
-      update("budgetId", availablePlannings[0].id);
-      return;
-    }
-
-    if (form.budgetId && !availablePlannings.some((plan) => plan.id === form.budgetId)) {
+    if (
+      form.budgetId &&
+      !availablePlannings.some((plan) => plan.id === form.budgetId)
+    ) {
       update("budgetId", "");
     }
   }, [availablePlannings, form.budgetId, form.kind]);
@@ -1533,6 +1531,7 @@ export function UnifiedFinancialEntryModal({
                               value={form.categoryId}
                               onChange={(value) => {
                                 update("categoryId", value);
+                                update("budgetId", "");
                                 const category = categories.find((item) => item.id === value);
                                 const normalizedName = category?.name
                                   .normalize("NFD")
@@ -1553,21 +1552,30 @@ export function UnifiedFinancialEntryModal({
                             />
 
                             {availablePlannings.length > 0 && form.kind === "expense" && (
-                              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+                              <div className="rounded-xl border border-[#C8A15A]/25 bg-[#F7F5EF] p-3">
                                 <SelectField
-                                  label="Planejamento relacionado"
-                                  value={form.budgetId}
-                                  onChange={(value) => update("budgetId", value)}
-                                  options={availablePlannings.map((plan) => ({
-                                    value: plan.id,
-                                    label: `${plan.name} · ${formatCurrency(plan.amount)}`,
-                                  }))}
-                                  emptyLabel="Não vincular"
+                                  label="Esta movimentaÃ§Ã£o faz parte de um planejamento?"
+                                  value={form.budgetId || "__none__"}
+                                  onChange={(value) =>
+                                    update(
+                                      "budgetId",
+                                      value === "__none__" ? "" : value,
+                                    )
+                                  }
+                                  options={[
+                                    {
+                                      value: "__none__",
+                                      label: "NÃ£o Â· deixar fora do planejamento",
+                                    },
+                                    ...availablePlannings.map((plan) => ({
+                                      value: plan.id,
+                                      label: "Sim Â· " + plan.name + " Â· " + formatCurrency(plan.amount),
+                                    })),
+                                  ]}
+                                  emptyLabel="NÃ£o Â· deixar fora do planejamento"
                                 />
-                                <p className="mt-2 text-[11px] leading-4 text-emerald-800/80">
-                                  {availablePlannings.length === 1
-                                    ? "Este planejamento foi selecionado automaticamente porque é o único desta categoria no mês."
-                                    : "Há mais de um planejamento nesta categoria. Escolha qual deles este gasto deve consumir."}
+                                <p className="mt-2 text-[11px] leading-4 text-[#3A3A3C]/60">
+                                  Ter a mesma categoria nÃ£o Ã© suficiente para consumir a reserva. O gasto sÃ³ entra no planejamento que vocÃª escolher aqui.
                                 </p>
                               </div>
                             )}

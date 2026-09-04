@@ -160,28 +160,13 @@ export function BudgetPlanningPanel({
 
   const rows = useMemo(() => {
     const categoryMap = new Map(categories.map((category) => [category.id, category]));
-    const budgetsByCategory = new Map<string, Budget[]>();
     const committedByBudget = new Map<string, number>();
-
-    budgets.forEach((budget) => {
-      const current = budgetsByCategory.get(budget.category_id) ?? [];
-      current.push(budget);
-      budgetsByCategory.set(budget.category_id, current);
-    });
 
     transactions.forEach((transaction) => {
       if (!transaction.category_id || transaction.status !== "paid") return;
       if (monthKey(transaction.occurred_on) !== month) return;
 
-      let budgetId = transaction.budget_id;
-
-      if (!budgetId) {
-        const categoryBudgets = budgetsByCategory.get(transaction.category_id) ?? [];
-        if (categoryBudgets.length === 1) {
-          budgetId = categoryBudgets[0].id;
-        }
-      }
-
+      const budgetId = transaction.budget_id;
       if (!budgetId) return;
 
       committedByBudget.set(
@@ -414,7 +399,7 @@ export function BudgetPlanningPanel({
             </h2>
           </div>
           <p className="mt-1 max-w-2xl text-sm leading-6 text-[#3A3A3C]/60">
-            Reserve um valor para uma categoria. Somente gastos efetivamente pagos nessa categoria e nesse mês consomem o planejamento.
+            Reserve um valor para um objetivo. Somente gastos pagos e explicitamente vinculados a esse planejamento consomem a reserva.
           </p>
         </div>
 
