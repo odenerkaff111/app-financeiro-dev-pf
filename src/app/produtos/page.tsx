@@ -15,7 +15,7 @@ export default function ProdutosPage() {
   return null;
 }
 
-export function ProdutosPageContent() {
+function ProdutosPageContent() {
   const [produtos, setProdutos] = useState<any[]>([]);
   const [busca, setBusca] = useState("");
   const [modalAberto, setModalAberto] = useState(false);
@@ -103,5 +103,6 @@ export function ProdutosPageContent() {
     </div>
   );
 }
+
 
 
