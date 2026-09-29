@@ -1,0 +1,18 @@
+{
+    email {$TLS_EMAIL}
+}
+{$EVOLUTION_DOMAIN} {
+    encode gzip
+    @api path /instance/* /message/sendText/*
+    handle @api {
+        reverse_proxy evolution:8080
+    }
+    handle {
+        respond "Not found" 404
+    }
+    header {
+        X-Content-Type-Options nosniff
+        Referrer-Policy no-referrer
+        -Server
+    }
+}

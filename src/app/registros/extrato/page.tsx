@@ -19,6 +19,7 @@ import {
   useState,
 } from "react";
 import { supabase } from "@/lib/supabase";
+import { rowResult } from "@/lib/control/client";
 import { useHousehold } from "@/contexts/HouseholdContext";
 
 type PeriodMode = "today" | "month" | "custom" | "all";
@@ -31,6 +32,8 @@ type CategoryRow = {
 type TransactionRow = {
   id: string;
   category_id: string | null;
+  card_statement_id: string | null;
+  financial_scope: string;
   type: string;
   status: string;
   description: string;
@@ -149,6 +152,7 @@ function statementTimestamp(transaction: TransactionRow) {
 
 function eventKind(transaction: TransactionRow): StatementKind {
   if (
+    transaction.type === "loan_repayment" ||
     transaction.type === "income" ||
     transaction.type === "debt_received" ||
     transaction.type === "investment_withdrawal"
@@ -156,6 +160,7 @@ function eventKind(transaction: TransactionRow): StatementKind {
     return "inflow";
   }
 
+  if (transaction.metadata?.origin === "card_statement_payment") return "outflow";
   if (transaction.type === "transfer") {
     return "transfer";
   }
@@ -185,15 +190,7 @@ export default function ExtratoPage() {
     setError(null);
 
     const [transactionsResult, categoriesResult] = await Promise.all([
-      supabase
-        .from("pf_transactions")
-        .select(
-          "id, category_id, type, status, description, merchant, amount, occurred_on, due_date, paid_at, installment_group_id, installment_number, installment_total, metadata, created_at",
-        )
-        .eq("household_id", household.id)
-        .neq("status", "cancelled")
-        .order("created_at", { ascending: false })
-        .limit(5000),
+      rowResult<TransactionRow>("pf_transactions",household.id),
       supabase
         .from("pf_categories")
         .select("id, name")
@@ -208,13 +205,14 @@ export default function ExtratoPage() {
       return;
     }
 
-    setTransactions((transactionsResult.data ?? []) as TransactionRow[]);
+    setTransactions(((transactionsResult.data ?? []) as TransactionRow[]).filter(t=>t.status!=="cancelled"));
     setCategories((categoriesResult.data ?? []) as CategoryRow[]);
     setLoading(false);
   }, [household.id]);
 
   useEffect(() => {
-    void loadData();
+    const task=setTimeout(()=>void loadData(),0);
+    return()=>clearTimeout(task);
   }, [loadData]);
 
   const categoryMap = useMemo(
@@ -231,14 +229,14 @@ export default function ExtratoPage() {
 
       if (
         transaction.installment_group_id &&
-        origin === "installment_purchase"
+        (origin === "installment_purchase" || Boolean(transaction.card_statement_id))
       ) {
         const current = installmentGroups.get(transaction.installment_group_id) ?? [];
         current.push(transaction);
         installmentGroups.set(transaction.installment_group_id, current);
       }
 
-      if (transaction.status !== "paid") return;
+      if (transaction.status !== "paid" || transaction.card_statement_id) return;
 
       const kind = eventKind(transaction);
       const amount = Math.abs(Number(transaction.amount) || 0);
@@ -250,6 +248,9 @@ export default function ExtratoPage() {
       const detailParts = [
         transaction.merchant,
         installmentDetail,
+        transaction.financial_scope === "business" ? "Empresa (PJ)" : null,
+        transaction.type === "loan_given" || transaction.type === "loan_repayment" ? "Principal de emprestimo; nao e receita/despesa de consumo" : null,
+        transaction.metadata?.date_unknown ? "Data original nao informada; exibido pelo registro" : null,
       ].filter(Boolean);
 
       events.push({
@@ -267,7 +268,7 @@ export default function ExtratoPage() {
           "Sem categoria",
         amount,
         cashImpact:
-          kind === "inflow"
+          transaction.metadata?.date_unknown && transaction.type === "loan_given" ? 0 : kind === "inflow"
             ? amount
             : kind === "outflow"
               ? -amount
@@ -284,13 +285,13 @@ export default function ExtratoPage() {
 
       const metadata = first.metadata ?? {};
       const purchaseTotal =
-        numberFromMetadata(metadata.purchase_total_amount) ||
+        (sorted.some(t=>t.metadata?.installment_corrected_at) ? 0 : numberFromMetadata(metadata.purchase_total_amount)) ||
         sorted.reduce((total, item) => total + Number(item.amount || 0), 0);
       const holder = String(metadata.card_holder ?? "").trim();
       const institution = String(metadata.card_institution ?? "").trim();
       const cardLabel = [holder, institution].filter(Boolean).join(" · ");
       const installmentCount = first.installment_total ?? sorted.length;
-      const at = first.created_at;
+      const at = metadata.date_unknown ? first.created_at : `${first.occurred_on}T12:00:00-03:00`;
 
       events.push({
         id: `card:${groupId}`,
@@ -302,6 +303,8 @@ export default function ExtratoPage() {
           first.merchant,
           cardLabel || "Cartão de crédito",
           `${installmentCount}x`,
+          metadata.date_unknown ? "Compra anterior; data original nao informada" : "Data da compra; horario nao informado",
+          first.financial_scope === "business" ? "Empresa (PJ)" : null,
         ]
           .filter(Boolean)
           .join(" · "),

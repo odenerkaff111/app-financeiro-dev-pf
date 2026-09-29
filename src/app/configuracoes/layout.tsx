@@ -41,7 +41,7 @@ export default function ConfiguracoesLayout({
             href="/configuracoes"
             className={[
               "inline-flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition",
-              !aiActive
+              pathname === "/configuracoes"
                 ? "bg-[#0D1B2A] text-white"
                 : "text-[#3A3A3C]/65 hover:bg-[#F7F5EF]",
             ].join(" ")}
@@ -51,6 +51,8 @@ export default function ConfiguracoesLayout({
             />
             Geral
           </Link>
+
+          <Link href="/configuracoes/lembretes" className={"rounded-xl px-4 py-2.5 text-sm font-semibold " + (pathname === "/configuracoes/lembretes" ? "bg-[#0D1B2A] text-white" : "text-[#3A3A3C]/65")}>Lembretes e notificações</Link>
 
           {isAdmin && (
             <Link

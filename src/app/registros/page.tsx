@@ -340,6 +340,9 @@ function getPeriodReferenceDate(transaction: Transaction) {
 }
 
 function getTypeOption(type: TransactionType | string): TypeOption {
+  if (String(type) === "loan_given") return {value:"expense",label:"Emprestimo concedido",shortLabel:"Valor a receber",icon:ArrowRightLeft};
+  if (String(type) === "loan_repayment") return {value:"income",label:"Devolucao de emprestimo",shortLabel:"Principal recebido",icon:ArrowRightLeft};
+
   if (type === "debt_payment") {
     return {
       value: "expense",
@@ -627,7 +630,8 @@ export default function TransactionsPage() {
   }, [household.id]);
 
   useEffect(() => {
-    void loadData();
+    const task=setTimeout(()=>void loadData(),0);
+    return()=>clearTimeout(task);
   }, [loadData]);
 
   const accountMap = useMemo(() => {
@@ -928,6 +932,9 @@ export default function TransactionsPage() {
   function openEditModal(
     transaction: Transaction,
   ) {
+    if (["loan_given","loan_repayment"].includes(String(transaction.type)) || transaction.metadata?.origin === "card_statement_payment" || transaction.metadata?.credit_card_account_id) {
+      setPageError("Use Proximas obrigacoes para confirmar/pagar faturas ou receber emprestimos; use Parcelamentos para editar compras. Esses registros nao podem ser alterados isoladamente."); return;
+    }
     if (transaction.installment_group_id) {
       setPageError(
         "Esta movimentação faz parte de uma compra parcelada. Ajuste vencimentos e consulte o grupo pela aba Parcelamentos.",

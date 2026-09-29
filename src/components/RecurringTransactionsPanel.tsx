@@ -21,6 +21,7 @@ import {
   type FormEvent,
 } from "react";
 import { supabase } from "@/lib/supabase";
+import { rows, changed, type Account } from "@/lib/control/client";
 import { useHousehold } from "@/contexts/HouseholdContext";
 
 type RecurringType =
@@ -36,7 +37,8 @@ type TransactionStatus =
 type RecurringTemplate = {
   id: string;
   household_id: string;
-  account_id: string;
+  account_id: string | null;
+  credit_card_account_id: string | null;
   category_id: string | null;
 
   type: RecurringType;
@@ -69,6 +71,7 @@ type RecurringTransaction = {
 };
 
 type EditForm = {
+  credit_card_account_id: string;
   amount: string;
   day_of_month: string;
 
@@ -268,6 +271,7 @@ export function RecurringTransactionsPanel() {
     editForm,
     setEditForm,
   ] = useState<EditForm>({
+    credit_card_account_id: "",
     amount: "",
     day_of_month: "",
     starts_on: "",
@@ -284,6 +288,8 @@ export function RecurringTransactionsPanel() {
     status: "planned",
   });
 
+  const [paymentAccounts,setPaymentAccounts]=useState<Account[]>([]);
+  useEffect(()=>{let active=true;void rows<Account>("pf_accounts",household.id).then(a=>{if(active)setPaymentAccounts(a.filter(x=>x.is_active&&x.type==="credit_card"));}).catch(e=>setError(String(e.message)));return()=>{active=false;};},[household.id]);
   const loadData =
     useCallback(
       async (
@@ -412,7 +418,8 @@ export function RecurringTransactionsPanel() {
     );
 
   useEffect(() => {
-    void loadData();
+    const task=setTimeout(()=>void loadData(),0);
+    return()=>clearTimeout(task);
   }, [loadData]);
 
   useEffect(() => {
@@ -490,6 +497,7 @@ export function RecurringTransactionsPanel() {
 
     setGenerating(false);
 
+    changed();
     await loadData(false);
   }
 
@@ -535,6 +543,7 @@ export function RecurringTransactionsPanel() {
       return;
     }
 
+    changed();
     await loadData(false);
   }
 
@@ -547,6 +556,7 @@ export function RecurringTransactionsPanel() {
     );
 
     setEditForm({
+      credit_card_account_id: template.credit_card_account_id ?? "",
       amount:
         template.amount ===
         null
@@ -695,6 +705,7 @@ export function RecurringTransactionsPanel() {
 
         is_active:
           editForm.is_active,
+        credit_card_account_id: editForm.credit_card_account_id || null,
 
         updated_at:
           new Date()
@@ -727,6 +738,7 @@ export function RecurringTransactionsPanel() {
     setSaving(false);
     setEditingTemplate(null);
 
+    changed();
     await loadData(false);
   }
 
@@ -797,6 +809,7 @@ export function RecurringTransactionsPanel() {
     setSaving(false);
     setVariableTemplate(null);
 
+    changed();
     await loadData(false);
   }
 
@@ -891,8 +904,7 @@ export function RecurringTransactionsPanel() {
                     </div>
 
                     <p className="mt-1 truncate pl-6 text-xs text-[#3A3A3C]/55">
-                      {template.merchant ||
-                        "Sem estabelecimento"}
+                      {template.merchant || "Sem estabelecimento"}{template.credit_card_account_id ? " | Cartao de credito (previsao mensal)" : ""}
                     </p>
                   </div>
 
@@ -1059,6 +1071,7 @@ export function RecurringTransactionsPanel() {
                 onSubmit={saveTemplate}
                 className="space-y-5 px-6 py-6"
               >
+                <label className="block space-y-2 text-sm"><span>Forma de pagamento da recorrencia</span><select className="h-11 w-full rounded-xl border bg-white px-3" value={editForm.credit_card_account_id} onChange={e=>setEditForm(old=>({...old,credit_card_account_id:e.target.value}))}><option value="">Pagamento pela conta (nao e cartao)</option>{paymentAccounts.map(a=><option value={a.id} key={a.id}>{a.name}</option>)}</select><span className="block text-xs text-slate-500">No cartao, o dia e a data da cobranca. O vencimento da fatura e calculado pelo fechamento. Editar altera apenas previsoes nao cobradas.</span></label>
                 <label className="flex cursor-pointer items-center justify-between rounded-xl border border-[#0D1B2A]/10 bg-white p-4">
                   <div>
                     <p className="text-sm font-medium text-[#0D1B2A]">

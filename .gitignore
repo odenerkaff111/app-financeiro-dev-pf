@@ -5,3 +5,16 @@ build/
 .env
 .env.local
 .DS_Store
+
+# Private financial imports, local QR infrastructure secrets and test artifacts
+.private-finance/
+.env.*
+!.env.example
+infra/whatsapp/.env
+infra/whatsapp/vercel-secrets.txt
+.financeiro-backups/
+.control-test/
+*.tsbuildinfo
+
+
+.push-private/

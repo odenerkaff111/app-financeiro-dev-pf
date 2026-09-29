@@ -15,6 +15,8 @@ import {
   WalletCards,
   X,
 } from "lucide-react";
+import { LoansPanel } from "@/components/control/FinanceControl";
+import { rpc as controlRpc } from "@/lib/control/client";
 import { createPortal } from "react-dom";
 import {
   useCallback,
@@ -37,6 +39,8 @@ import {
 } from "@/lib/financial-engine";
 
 type EntryKind =
+  | "loan_given"
+  | "loan_repayment"
   | "expense"
   | "income"
   | "transfer"
@@ -96,6 +100,7 @@ type FormState = {
   installmentCardHolder: string;
   installmentCardInstitution: string;
   installmentFirstDueDate: string;
+  cardAlreadyIncluded: boolean;
 
   commitmentId: string;
   debtId: string;
@@ -130,11 +135,13 @@ type EntryOption = {
 
 const PRIMARY_OPTIONS: Record<EntryDirection, EntryOption[]> = {
   outgoing: [
+    { value: "loan_given", label: "Emprestimo que vou conceder" },
     { value: "expense", label: "Despesa ou conta" },
     { value: "debt_payment", label: "Pagamento de dívida" },
     { value: "investment_contribution", label: "Investimento" },
   ],
   incoming: [
+    { value: "loan_repayment", label: "Devolucao de emprestimo" },
     { value: "income", label: "Receita ou salário" },
   ],
 };
@@ -152,6 +159,7 @@ const SECONDARY_OPTIONS: EntryOption[] = [
 function directionForKind(kind: EntryKind): EntryDirection {
   if ([
     "income",
+    "loan_repayment",
     "receivable",
     "settle_receivable",
     "investment_withdrawal",
@@ -211,12 +219,13 @@ function emptyForm(kind: EntryKind = "expense"): FormState {
     isRecurring: false,
     recurrenceEndsOn: "",
     isInstallmentPurchase: false,
-    installmentPurchaseCount: "2",
-    installmentCardMode: "third_party",
+    installmentPurchaseCount: "1",
+    installmentCardMode: "own",
     installmentCardAccountId: "",
     installmentCardHolder: "",
     installmentCardInstitution: "",
     installmentFirstDueDate: nextMonthSameDay(),
+    cardAlreadyIncluded: false,
     commitmentId: "",
     debtId: "",
     debtGroup: "personal",
@@ -413,7 +422,7 @@ export function UnifiedFinancialEntryModal({
   );
 
   const availablePlannings = useMemo(() => {
-    if (form.kind !== "expense" || !form.categoryId) return [];
+    if (form.kind !== "expense") return [];
 
     const referenceDate = form.isInstallmentPurchase
       ? form.installmentFirstDueDate
@@ -426,12 +435,10 @@ export function UnifiedFinancialEntryModal({
 
     return budgets.filter(
       (budget) =>
-        budget.category_id === form.categoryId &&
         budget.month.slice(0, 7) === referenceMonth,
     );
   }, [
     budgets,
-    form.categoryId,
     form.date,
     form.dueDate,
     form.installmentFirstDueDate,
@@ -465,14 +472,14 @@ export function UnifiedFinancialEntryModal({
     }
 
     if (form.kind === "investment_contribution") {
-      return accounts.filter((account) => account.type !== "investment");
+      return accounts.filter((account) => account.type !== "investment" && account.type !== "credit_card");
     }
 
     if (form.kind === "income") {
       return accounts.filter((account) => account.type !== "credit_card");
     }
 
-    return accounts;
+    return accounts.filter(account => account.type !== "credit_card" && account.type !== "investment");
   }, [accounts, form.kind]);
 
   const creditCardAccounts = useMemo(
@@ -497,7 +504,7 @@ export function UnifiedFinancialEntryModal({
       );
     }
 
-    return accounts.filter((account) => account.id !== form.accountId);
+    return accounts.filter((account) => account.id !== form.accountId && account.type !== "credit_card");
   }, [accounts, form.accountId, form.kind]);
 
   function update<K extends keyof FormState>(field: K, value: FormState[K]) {
@@ -686,6 +693,21 @@ export function UnifiedFinancialEntryModal({
       throw new Error("Informe o titular do cartão de terceiro.");
     }
 
+    if (form.installmentCardMode === "own") {
+      await controlRpc("pf_create_card_purchase_v2", {
+        p_household: household.id, p_account: form.installmentCardAccountId,
+        p_description: form.description.trim(), p_merchant: form.counterparty.trim() || null,
+        p_amount: amount, p_count: installments, p_first_due: form.installmentFirstDueDate,
+        p_category: form.categoryId || null, p_budget: form.budgetId || null,
+        p_purchased_on: form.date || null, p_included: form.cardAlreadyIncluded,
+        p_monthly: form.isRecurring, p_ends_on: form.recurrenceEndsOn || null,
+        p_notes: form.notes.trim() || null, p_essential: form.isEssential,
+        p_request: crypto.randomUUID(),
+      });
+      return;
+    }
+    if (form.isRecurring) throw new Error("Assinatura recorrente: selecione um cartao proprio e 1 parcela.");
+
     const result = await supabase.rpc("pf_create_installment_purchase_v1", {
       target_household_id: household.id,
       purchase_description: form.description.trim(),
@@ -694,10 +716,7 @@ export function UnifiedFinancialEntryModal({
       purchase_installments: installments,
       first_installment_due_date: form.installmentFirstDueDate,
       purchase_category_id: form.categoryId,
-      credit_card_account_id:
-        form.installmentCardMode === "own"
-          ? form.installmentCardAccountId
-          : null,
+      credit_card_account_id: null,
       third_party_card_holder:
         form.installmentCardMode === "third_party"
           ? form.installmentCardHolder.trim()
@@ -732,7 +751,7 @@ export function UnifiedFinancialEntryModal({
     if (!Number.isFinite(amount) || amount <= 0) {
       throw new Error("Informe um valor maior que zero.");
     }
-    if (requiresSourceAccount && !form.accountId) {
+    if ((requiresSourceAccount || form.status === "paid") && !form.accountId) {
       throw new Error("Selecione uma conta.");
     }
     if (requiresDestination && !form.destinationAccountId) {
@@ -833,7 +852,7 @@ export function UnifiedFinancialEntryModal({
       : null;
 
     if (form.kind === "investment_contribution") {
-      destinationAccountId = await ensureInvestmentDestination(userId);
+      destinationAccountId = form.destinationAccountId || await ensureInvestmentDestination(userId);
     }
 
     const result = await supabase
@@ -1185,7 +1204,7 @@ export function UnifiedFinancialEntryModal({
             </button>
           </header>
 
-          <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
+          {(form.kind === "loan_given" || form.kind === "loan_repayment") ? <div className="overflow-y-auto p-5"><LoansPanel showFormInitially={form.kind === "loan_given"} /></div> : <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
             <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-5 sm:px-8 sm:py-6">
               <div className="space-y-4">
                 <div>
@@ -1383,9 +1402,9 @@ export function UnifiedFinancialEntryModal({
                         {((form.kind === "expense" && !form.isInstallmentPurchase) ||
                           form.kind === "income" ||
                           form.kind === "investment_contribution") && (
-                          <details className="rounded-xl border border-[#0D1B2A]/10 bg-white/60 px-4 py-3 md:col-span-2">
+                          <details open className="rounded-xl border border-[#0D1B2A]/10 bg-white/60 px-4 py-3 md:col-span-2">
                             <summary className="cursor-pointer text-xs font-semibold text-[#3A3A3C]/60">
-                              Conta bancária (opcional)
+                              Conta bancaria real (obrigatoria para valores ja pagos/recebidos)
                             </summary>
                             <div className="mt-3">
                               <AccountSelect
@@ -1397,11 +1416,12 @@ export function UnifiedFinancialEntryModal({
                                 value={form.accountId}
                                 onChange={(value) => update("accountId", value)}
                                 accounts={sourceAccounts}
-                                optional
+                                optional={form.status !== "paid"}
                               />
                             </div>
                           </details>
                         )}
+                        {form.kind === "investment_contribution" && <AccountSelect label="Cofrinho / investimento de destino (ou criar por instituicao)" value={form.destinationAccountId} onChange={value => update("destinationAccountId",value)} accounts={accounts.filter(a => a.type === "investment")} optional />}
                         {form.kind === "investment_contribution" && (
                           <div className="rounded-xl border border-[#C8A15A]/25 bg-[#C8A15A]/8 px-4 py-3 text-xs leading-5 text-[#0D1B2A]/70 md:col-span-2">
                             O investimento de destino será organizado automaticamente pela instituição informada acima. Você não precisa cadastrar uma conta de investimento antes.
@@ -1418,7 +1438,6 @@ export function UnifiedFinancialEntryModal({
                                   update("isInstallmentPurchase", checked);
                                   if (checked) {
                                     update("status", "planned");
-                                    update("isRecurring", false);
                                   }
                                 }}
                                 className="mt-0.5 h-4 w-4 accent-[#0D1B2A]"
@@ -1435,6 +1454,12 @@ export function UnifiedFinancialEntryModal({
 
                             {form.isInstallmentPurchase && (
                               <div className="grid grid-cols-1 gap-3 border-t border-[#C8A15A]/20 pt-3 md:grid-cols-2">
+                                {form.installmentCardMode === "own" && <>
+                                  <DateField label="Data real da compra / cobranca" value={form.date} onChange={value => update("date", value)} />
+                                  <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={form.cardAlreadyIncluded} onChange={event => update("cardAlreadyIncluded", event.target.checked)} />Ja incluida no valor de fatura e limite que informei. Apenas detalhar, sem somar novamente.</label>
+                                  <p className="text-xs text-[#3A3A3C]/70 md:col-span-2">Se ainda nao informou o total real da fatura, confira primeiro em Movimentacoes / Conciliacao. Para assinatura mensal, use 1 parcela e marque a recorrencia abaixo.</p>
+                                </>}
+
                                 <TextField
                                   label="Número de parcelas"
                                   value={form.installmentPurchaseCount}
@@ -1554,7 +1579,7 @@ export function UnifiedFinancialEntryModal({
                             {availablePlannings.length > 0 && form.kind === "expense" && (
                               <div className="rounded-xl border border-[#C8A15A]/25 bg-[#F7F5EF] p-3">
                                 <SelectField
-                                  label="Esta movimentaÃ§Ã£o faz parte de um planejamento?"
+                                  label="Esta movimentação faz parte de um planejamento?"
                                   value={form.budgetId || "__none__"}
                                   onChange={(value) =>
                                     update(
@@ -1565,17 +1590,17 @@ export function UnifiedFinancialEntryModal({
                                   options={[
                                     {
                                       value: "__none__",
-                                      label: "NÃ£o Â· deixar fora do planejamento",
+                                      label: "Não · deixar fora do planejamento",
                                     },
                                     ...availablePlannings.map((plan) => ({
                                       value: plan.id,
-                                      label: "Sim Â· " + plan.name + " Â· " + formatCurrency(plan.amount),
+                                      label: "Sim · " + plan.name + " · " + formatCurrency(plan.amount),
                                     })),
                                   ]}
-                                  emptyLabel="NÃ£o Â· deixar fora do planejamento"
+                                  emptyLabel="Não · deixar fora do planejamento"
                                 />
                                 <p className="mt-2 text-[11px] leading-4 text-[#3A3A3C]/60">
-                                  Ter a mesma categoria nÃ£o Ã© suficiente para consumir a reserva. O gasto sÃ³ entra no planejamento que vocÃª escolher aqui.
+                                  Ter a mesma categoria não é suficiente para consumir a reserva. O gasto só entra no planejamento que você escolher aqui.
                                 </p>
                               </div>
                             )}
@@ -1693,7 +1718,7 @@ export function UnifiedFinancialEntryModal({
 
                       {(form.kind === "expense" || form.kind === "income") &&
                         !isDebtExpenseCategory &&
-                        !form.isInstallmentPurchase && (
+                        (!form.isInstallmentPurchase || (form.installmentCardMode === "own" && form.installmentPurchaseCount === "1")) && (
                           <RecurringToggle
                             checked={form.isRecurring}
                             onChange={(checked) => {
@@ -2137,7 +2162,7 @@ export function UnifiedFinancialEntryModal({
                 Salvar registro
               </button>
             </footer>
-          </form>
+          </form>}
         </div>
       </div>
     </div>

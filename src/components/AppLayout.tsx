@@ -12,6 +12,7 @@ import {
   Eye,
   Loader2,
 } from "lucide-react";
+import { DailyFinanceGate } from "@/components/control/DailyFinanceGate";
 import {
   getSessionOnce,
   supabase,
@@ -354,6 +355,7 @@ function AuthenticatedShell({
     <main className="relative min-h-screen overflow-x-hidden bg-[#F7F5EF] text-[#0D1B2A]">
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_12%_10%,rgba(200,161,90,0.08),transparent_27%),radial-gradient(circle_at_92%_90%,rgba(13,27,42,0.05),transparent_30%)]" />
 
+      <DailyFinanceGate>
       <section className="relative mx-auto w-full max-w-[1600px] px-3 pb-28 pt-20 sm:px-6 md:pb-12 md:pt-28 lg:px-8">
         {isViewer && (
           <div className="mb-4 flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
@@ -377,6 +379,7 @@ function AuthenticatedShell({
       </section>
 
       <AppDock />
+      </DailyFinanceGate>
     </main>
   );
 }

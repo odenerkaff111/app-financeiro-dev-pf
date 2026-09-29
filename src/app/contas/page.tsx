@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { supabase, getSessionOnce } from "@/lib/supabase";
 import { useHousehold } from "@/contexts/HouseholdContext";
+import { AccountBalanceEditor } from "@/components/control/AccountBalanceEditor";
 
 type AccountType =
   | "checking"
@@ -41,6 +42,7 @@ type AccountSource =
 type Account = {
   id: string;
   household_id: string;
+  account_scope: "personal" | "business";
   owner_user_id: string | null;
   name: string;
   institution_name: string | null;
@@ -60,6 +62,7 @@ type Account = {
 };
 
 type AccountForm = {
+  account_scope: "personal" | "business";
   name: string;
   institution_name: string;
   type: AccountType;
@@ -118,6 +121,7 @@ const ACCOUNT_TYPE_OPTIONS: AccountTypeOption[] = [
 ];
 
 const EMPTY_FORM: AccountForm = {
+  account_scope: "personal",
   name: "",
   institution_name: "",
   type: "checking",
@@ -196,6 +200,7 @@ export default function AccountsPage() {
   );
 
   const [modalOpen, setModalOpen] = useState(false);
+  const [balanceAccount, setBalanceAccount] = useState<Account | null>(null);
 
   const [editingAccount, setEditingAccount] =
     useState<Account | null>(null);
@@ -309,6 +314,7 @@ export default function AccountsPage() {
     setEditingAccount(account);
 
     setForm({
+      account_scope: account.account_scope ?? "personal",
       name: account.name,
       institution_name:
         account.institution_name ?? "",
@@ -429,12 +435,13 @@ export default function AccountsPage() {
 
     const payload = {
       household_id: household.id,
-      owner_user_id: currentUserId,
+      owner_user_id: editingAccount?.owner_user_id ?? currentUserId,
+      account_scope: form.account_scope,
       name: form.name.trim(),
       institution_name:
         form.institution_name.trim() || null,
       type: form.type,
-      balance: parsedBalance,
+      balance: editingAccount ? Number(editingAccount.balance) : parsedBalance,
       credit_limit: isCreditCard
         ? parsedCreditLimit
         : null,
@@ -497,67 +504,12 @@ export default function AccountsPage() {
   }
 
   function openCreditUpdate(account: Account) {
-    const currentBill = Math.max(0, Number(account.balance || 0));
-    const suggested = currentBill > 0 ? currentBill : 0;
-
-    setCreditUpdateAccount(account);
-    setCreditPaidAmount(String(suggested).replace(".", ","));
-    setCreditReleasedAmount(String(suggested).replace(".", ","));
-    setError(null);
+    void account;
+    window.location.assign("/registros/obrigacoes");
   }
 
   async function saveCreditUpdate() {
-    if (!creditUpdateAccount || !canWrite) return;
-
-    const paidAmount = parseAmount(creditPaidAmount);
-    const releasedAmount = parseAmount(creditReleasedAmount);
-    const creditLimit = Number(creditUpdateAccount.credit_limit || 0);
-    const currentBill = Math.max(0, Number(creditUpdateAccount.balance || 0));
-    const currentAvailable =
-      creditUpdateAccount.available_credit === null ||
-      creditUpdateAccount.available_credit === undefined
-        ? Math.max(creditLimit - currentBill, 0)
-        : Math.max(0, Number(creditUpdateAccount.available_credit));
-
-    if (!Number.isFinite(paidAmount) || paidAmount < 0) {
-      setError("Informe um valor pago válido.");
-      return;
-    }
-
-    if (!Number.isFinite(releasedAmount) || releasedAmount < 0) {
-      setError("Informe quanto de limite foi efetivamente liberado.");
-      return;
-    }
-
-    const nextBill = Math.max(0, currentBill - paidAmount);
-    const nextAvailable = Math.max(
-      0,
-      Math.min(creditLimit || Number.MAX_SAFE_INTEGER, currentAvailable + releasedAmount),
-    );
-
-    setUpdatingCredit(true);
-    setError(null);
-
-    const result = await supabase
-      .from("pf_accounts")
-      .update({
-        balance: nextBill,
-        available_credit: nextAvailable,
-        balance_updated_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", creditUpdateAccount.id)
-      .eq("household_id", household.id);
-
-    if (result.error) {
-      setError(result.error.message || "Não foi possível atualizar o cartão.");
-      setUpdatingCredit(false);
-      return;
-    }
-
-    setUpdatingCredit(false);
-    setCreditUpdateAccount(null);
-    await loadAccounts();
+    window.location.assign("/registros/obrigacoes");
   }
 
   async function toggleAccountStatus(
@@ -829,6 +781,7 @@ export default function AccountsPage() {
                   </span>
 
                   <div className="flex items-center gap-1">
+                    {account.is_active && <button type="button" disabled={!canWrite} onClick={() => setBalanceAccount(account)} className="rounded-lg px-2 py-1.5 text-[11px] font-semibold text-[#8A6426] hover:bg-[#C8A15A]/10 disabled:opacity-40">Atualizar saldo</button>}
                     {account.type === "credit_card" && (
                       <button
                         type="button"
@@ -1073,6 +1026,8 @@ export default function AccountsPage() {
                 </select>
               </label>
 
+              <label className="block space-y-2 text-sm"><span>Natureza da conta</span><select className="h-11 w-full rounded-xl border bg-white px-3" value={form.account_scope} onChange={e=>updateForm("account_scope",e.target.value as "personal"|"business")}><option value="personal">Pessoal / familia (PF)</option><option value="business">Empresa (PJ)</option></select></label>
+              {editingAccount && <p className="rounded-xl bg-[#F7F5EF] p-3 text-sm">Para alterar o valor atual, <button type="button" className="underline" onClick={() => { setBalanceAccount(editingAccount); setModalOpen(false); }}>atualize o saldo desta conta</button>.</p>}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <label className="space-y-2">
                   <span className="text-sm font-medium text-[#0D1B2A]">
@@ -1086,6 +1041,7 @@ export default function AccountsPage() {
                   <input
                     type="text"
                     inputMode="decimal"
+                    readOnly={Boolean(editingAccount)}
                     value={form.balance}
                     onChange={(event) =>
                       updateForm(
@@ -1251,6 +1207,7 @@ export default function AccountsPage() {
           </div>
         </div>
       )}
+      {balanceAccount && <AccountBalanceEditor account={balanceAccount} onClose={() => setBalanceAccount(null)} onSaved={loadAccounts} />}
     </div>
   );
 }
