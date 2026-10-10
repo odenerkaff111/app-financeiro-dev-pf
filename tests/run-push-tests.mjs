@@ -75,12 +75,14 @@ test('Service worker trata push, clique e badge sem cache financeiro',()=>{asser
 const manifest=fs.readFileSync('src/app/manifest.ts','utf8');
 test('Manifest e standalone com icones',()=>{assert.ok(manifest.includes("display: 'standalone'"));assert.ok(manifest.includes('/icons/icon-192.png'));assert.ok(manifest.includes('/icons/icon-512.png'));});
 const reminder=fs.readFileSync('src/components/control/ReminderSettings.tsx','utf8');
-test('Permissao push depende de botao explicito',()=>{assert.ok(reminder.includes('Ativar notificacoes neste dispositivo'));assert.ok(reminder.includes('subscribeBrowserPush'));});
+test('Permissao push depende de botao explicito',()=>{assert.ok(reminder.includes('Ativar neste dispositivo'));assert.ok(reminder.includes('subscribeBrowserPush'));});
 test('iPhone pede permissao antes de qualquer chamada de rede no clique',()=>{const start=reminder.indexOf('async function activatePush');const end=reminder.indexOf('async function testPush');const body=reminder.slice(start,end);assert.ok(body.indexOf('subscribeBrowserPush')>=0);assert.equal(body.includes("await server<PushState>('/api/push'"),false);});
 const migration=fs.readFileSync('supabase/migrations/040_web_push_pwa.sql','utf8');
 test('Assinaturas nao sao legiveis diretamente pelo authenticated',()=>{assert.ok(migration.includes('revoke all on public.pf_push_subscriptions from public,anon,authenticated'));assert.ok(migration.includes('grant select on public.pf_push_outbox to authenticated'));});
 test('Claim de push respeita janela e confirmacao diaria',()=>{assert.ok(migration.includes("now()-due>interval '5 minutes'"));assert.ok(migration.includes('c.confirmed_at>=due'));assert.ok(migration.includes('unique(subscription_id,day,slot)'));});
 test('Cron so precisa chamar Vercel quando ha push pendente',()=>{assert.ok(migration.includes('pf_push_dispatch_needed_v1'));const prep=fs.readFileSync('tools/preparar-web-push.mjs','utf8');assert.ok(prep.includes('where public.pf_push_dispatch_needed_v1()'));});
+const pushFix=fs.readFileSync('supabase/migrations/041_web_push_dispatch_fixes.sql','utf8');
+test('Hotfix persistido evita ambiguidade de slot no Cron e no claim',()=>{assert.ok(pushFix.includes('v_slot'));assert.ok(pushFix.includes('o.slot=v_slot'));assert.ok(pushFix.includes('pf_claim_push_reminders_v1'));});
 const dispatch=fs.readFileSync('src/app/api/reminders/push-dispatch/route.ts','utf8');
 test('Despacho exige segredo e revalida job',()=>{assert.ok(dispatch.includes('pushDispatchAuthorized(request)'));assert.ok(dispatch.includes("pf_push_job_is_due_v1"));});
 console.log(`\n${tests} testes de PWA/Web Push passaram.`);

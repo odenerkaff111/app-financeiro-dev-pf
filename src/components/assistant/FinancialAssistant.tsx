@@ -821,10 +821,10 @@ export function FinancialAssistant({
           </div>
           <div className="min-w-0">
             <h2 className="truncate font-semibold text-[#0D1B2A]">
-              Assistente financeiro
+              Kyra
             </h2>
             <p className="truncate text-xs text-[#3A3A3C]/55">
-              Só salva depois da sua confirmação
+              Assistente financeiro · confirma antes de salvar
             </p>
           </div>
         </div>
@@ -858,14 +858,37 @@ export function FinancialAssistant({
         ) : (
           <div className="mx-auto w-full max-w-3xl space-y-5">
             {messages.length === 0 && (
-              <div className="rounded-2xl border border-dashed border-[#C8A15A]/40 bg-[#F7F5EF] p-5 text-sm leading-6 text-[#3A3A3C]/65">
-                <p className="font-semibold text-[#0D1B2A]">
-                  Pode falar naturalmente
+              <div className="mx-auto flex min-h-[46dvh] max-w-2xl flex-col items-center justify-center px-2 text-center">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#0D1B2A] text-[#C8A15A] shadow-lg">
+                  <Sparkles size={24} />
+                </div>
+                <h3 className="mt-5 font-sans text-xl font-semibold text-[#0D1B2A]">
+                  O que aconteceu com seu dinheiro?
+                </h3>
+                <p className="mt-2 max-w-md text-sm leading-6 text-[#3A3A3C]/55">
+                  Fale como falaria comigo normalmente. A Kyra entende o contexto e sempre mostra o que pretende registrar antes de salvar.
                 </p>
-                <p className="mt-2">
-                  “Paguei 100 para a Vanda pelo Santander.”
-                </p>
-                <p>“Gastei 84 com alimentação pelo Nubank.”</p>
+
+                <div className="mt-6 grid w-full gap-2 sm:grid-cols-2">
+                  {[
+                    "Gastei R$ 84 com alimentação pelo Nubank",
+                    "Paguei R$ 100 para a Vanda pelo Santander",
+                    "Quanto eu tenho disponível hoje?",
+                    "O que vence nos próximos dias?",
+                  ].map((suggestion) => (
+                    <button
+                      key={suggestion}
+                      type="button"
+                      onClick={() => {
+                        setInput(suggestion);
+                        window.setTimeout(() => inputRef.current?.focus(), 0);
+                      }}
+                      className="rounded-2xl border border-[#0D1B2A]/8 bg-[#F7F5EF] px-4 py-3 text-left text-xs font-medium leading-5 text-[#0D1B2A] transition hover:border-[#C8A15A]/45 hover:bg-white"
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
 
@@ -891,7 +914,7 @@ export function FinancialAssistant({
                       "rounded-2xl px-4 py-3 text-sm leading-6",
                       message.role === "user"
                         ? "rounded-br-md bg-[#0D1B2A] text-white"
-                        : "rounded-bl-md bg-[#F7F5EF] text-[#0D1B2A]",
+                        : "rounded-bl-md border border-[#0D1B2A]/6 bg-white text-[#0D1B2A] shadow-sm",
                     ].join(" ")}
                   >
                     {message.content}
@@ -954,7 +977,7 @@ export function FinancialAssistant({
         )}
       </div>
 
-      <footer className="shrink-0 border-t border-[#0D1B2A]/8 bg-white px-4 py-4 sm:px-5">
+      <footer className="shrink-0 border-t border-[#0D1B2A]/6 bg-white/95 px-3 py-3 backdrop-blur-xl sm:px-5 sm:py-4">
         <div className="mx-auto w-full max-w-3xl">
           {error && (
             <p className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-xs leading-5 text-red-700">
@@ -1026,7 +1049,7 @@ export function FinancialAssistant({
             }
           />
 
-          <div className="flex items-end gap-2 rounded-2xl border border-[#0D1B2A]/12 bg-[#F7F5EF] p-2 focus-within:border-[#C8A15A] focus-within:ring-2 focus-within:ring-[#C8A15A]/15">
+          <div className="flex items-end gap-2 rounded-[22px] border border-[#0D1B2A]/10 bg-[#F7F5EF] p-2 shadow-[0_8px_30px_rgba(13,27,42,0.06)] focus-within:border-[#C8A15A] focus-within:bg-white focus-within:ring-2 focus-within:ring-[#C8A15A]/15">
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
@@ -1043,7 +1066,7 @@ export function FinancialAssistant({
               onChange={(event) => setInput(event.target.value)}
               onKeyDown={onKeyDown}
               rows={1}
-              placeholder="Ex.: Paguei R$ 100 para a Vanda pelo Santander..."
+              placeholder="Mensagem para a Kyra..."
               disabled={loading || sending}
               className="max-h-32 min-h-11 flex-1 resize-none bg-transparent px-3 py-2.5 text-sm leading-6 text-[#0D1B2A] outline-none placeholder:text-[#3A3A3C]/40 disabled:opacity-60"
             />
@@ -1062,7 +1085,7 @@ export function FinancialAssistant({
             </button>
           </div>
           <p className="mt-2 text-center text-[10px] text-[#3A3A3C]/40">
-            Revise o card antes de confirmar.
+            Ações financeiras só são salvas depois da sua confirmação.
           </p>
         </div>
       </footer>

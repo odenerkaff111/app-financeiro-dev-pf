@@ -423,29 +423,17 @@ export default function ExtratoPage() {
 
   return (
     <div className="space-y-6 pb-12">
-      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#C8A15A]">
-            Linha do tempo financeira
-          </p>
-          <h1 className="mt-2 text-3xl font-semibold text-[#0D1B2A] sm:text-4xl">
-            Extrato
-          </h1>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-[#3A3A3C]/70">
-            Veja o que aconteceu em cada dia. Compras no cartão aparecem na data da compra; a saída de caixa acontece somente quando a fatura ou parcela é paga.
-          </p>
-        </div>
-
+      <div className="flex justify-end">
         <button
           type="button"
           onClick={exportCsv}
           disabled={filteredEvents.length === 0}
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#0D1B2A] px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-[#172D43] disabled:cursor-not-allowed disabled:opacity-40"
+          className="app-primary-button px-4 disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Download size={16} />
           Baixar CSV
         </button>
-      </header>
+      </div>
 
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <MetricCard

@@ -12,6 +12,7 @@ import {
   ArrowUpCircle,
   CheckCircle2,
   Clock,
+  SlidersHorizontal,
   Eye,
   EyeOff,
   Loader2,
@@ -47,6 +48,7 @@ import { MonthlyClosingSection } from "@/components/MonthlyClosingSection";
 import { InvestmentOverview } from "@/components/dashboard/InvestmentOverview";
 import { CostOfLivingCard } from "@/components/dashboard/CostOfLivingCard";
 import { BudgetPlanningSummary } from "@/components/dashboard/BudgetPlanningSummary";
+import { BottomSheet } from "@/components/ui/BottomSheet";
 
 type PeriodFilter =
   | "today"
@@ -900,6 +902,15 @@ export default function DashboardPage() {
         budgetReserve={budgetReserve}
       />
 
+      <details className="overflow-hidden rounded-2xl border border-[#0D1B2A]/10 bg-white shadow-sm">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4">
+          <div>
+            <p className="text-sm font-semibold text-[#0D1B2A]">Análises e planejamento</p>
+            <p className="mt-0.5 text-xs text-[#3A3A3C]/50">Visão anual, orçamento, investimentos e categorias</p>
+          </div>
+          <span className="rounded-full bg-[#F7F5EF] px-3 py-1.5 text-[11px] font-semibold text-[#9A773A]">Ver detalhes</span>
+        </summary>
+        <div className="space-y-6 border-t border-[#0D1B2A]/8 bg-[#F7F5EF]/45 p-4 sm:p-5">
       <section className="rounded-2xl border border-[#0D1B2A]/10 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -1021,6 +1032,8 @@ export default function DashboardPage() {
           />
         </div>
       </section>
+        </div>
+      </details>
 
       </div>
 
@@ -1055,18 +1068,56 @@ function PeriodFilterControl({
   onCustomStartChange: (value: string) => void;
   onCustomEndChange: (value: string) => void;
 }) {
+  const [open, setOpen] = useState(false);
   const invalidCustomRange =
     value === "custom" &&
     Boolean(customStart) &&
     Boolean(customEnd) &&
     customStart > customEnd;
+  const selected = periods.find((period) => period.value === value)?.label ?? "Período";
+
+  const customInputs = (
+    <div className="grid grid-cols-2 gap-2">
+      <label className="space-y-1.5">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-[#3A3A3C]/55">De</span>
+        <input
+          type="date"
+          value={customStart}
+          onChange={(event) => onCustomStartChange(event.target.value)}
+          className="h-11 w-full rounded-xl border border-[#0D1B2A]/12 bg-white px-3 text-xs text-[#0D1B2A] outline-none focus:border-[#C8A15A]"
+        />
+      </label>
+      <label className="space-y-1.5">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-[#3A3A3C]/55">Até</span>
+        <input
+          type="date"
+          value={customEnd}
+          onChange={(event) => onCustomEndChange(event.target.value)}
+          className="h-11 w-full rounded-xl border border-[#0D1B2A]/12 bg-white px-3 text-xs text-[#0D1B2A] outline-none focus:border-[#C8A15A]"
+        />
+      </label>
+      {invalidCustomRange && (
+        <p className="col-span-2 text-xs text-red-600">
+          A data inicial precisa ser anterior ou igual à data final.
+        </p>
+      )}
+    </div>
+  );
 
   return (
     <div className="space-y-2">
-      <div className="flex max-w-full items-center gap-1 overflow-x-auto rounded-xl border border-[#0D1B2A]/10 bg-[#F7F5EF] p-1">
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="inline-flex h-10 items-center gap-2 rounded-xl border border-[#0D1B2A]/10 bg-[#F7F5EF] px-3 text-xs font-semibold text-[#0D1B2A] sm:hidden"
+      >
+        <SlidersHorizontal size={15} />
+        {selected}
+      </button>
+
+      <div className="hidden max-w-full items-center gap-1 overflow-x-auto rounded-xl border border-[#0D1B2A]/10 bg-[#F7F5EF] p-1 sm:flex app-scrollbar-none">
         {periods.map((period) => {
           const active = value === period.value;
-
           return (
             <button
               key={period.value}
@@ -1085,39 +1136,46 @@ function PeriodFilterControl({
         })}
       </div>
 
-      {value === "custom" && (
-        <div className="rounded-xl border border-[#0D1B2A]/10 bg-white p-3">
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <label className="space-y-1">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-[#3A3A3C]/55">
-                De
-              </span>
-              <input
-                type="date"
-                value={customStart}
-                onChange={(event) => onCustomStartChange(event.target.value)}
-                className="h-10 w-full rounded-lg border border-[#0D1B2A]/12 bg-white px-3 text-xs text-[#0D1B2A] outline-none focus:border-[#C8A15A]"
-              />
-            </label>
-            <label className="space-y-1">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-[#3A3A3C]/55">
-                Até
-              </span>
-              <input
-                type="date"
-                value={customEnd}
-                onChange={(event) => onCustomEndChange(event.target.value)}
-                className="h-10 w-full rounded-lg border border-[#0D1B2A]/12 bg-white px-3 text-xs text-[#0D1B2A] outline-none focus:border-[#C8A15A]"
-              />
-            </label>
-          </div>
-          {invalidCustomRange && (
-            <p className="mt-2 text-xs text-red-600">
-              A data inicial precisa ser anterior ou igual à data final.
-            </p>
-          )}
+      {value === "custom" && <div className="hidden sm:block">{customInputs}</div>}
+
+      <BottomSheet
+        open={open}
+        onClose={() => setOpen(false)}
+        title="Período do painel"
+        footer={
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className="app-primary-button w-full px-4"
+          >
+            Aplicar período
+          </button>
+        }
+      >
+        <div className="space-y-2">
+          {periods.map((period) => {
+            const active = value === period.value;
+            return (
+              <button
+                key={period.value}
+                type="button"
+                onClick={() => onChange(period.value)}
+                className={[
+                  "flex min-h-12 w-full items-center justify-between rounded-2xl border px-4 text-left text-sm font-semibold",
+                  active
+                    ? "border-[#0D1B2A] bg-[#0D1B2A] text-white"
+                    : "border-[#0D1B2A]/8 bg-white text-[#0D1B2A]",
+                ].join(" ")}
+              >
+                {period.label}
+                {active && <CheckCircle2 size={17} />}
+              </button>
+            );
+          })}
+
+          {value === "custom" && <div className="pt-3">{customInputs}</div>}
         </div>
-      )}
+      </BottomSheet>
     </div>
   );
 }

@@ -1,17 +1,35 @@
-'use client';
+"use client";
 /* eslint-disable @next/next/no-img-element -- Ephemeral QR must not be stored or proxied by the image optimizer. */
-import { normalizeSlots } from '@/lib/control/core';
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { useHousehold } from '@/contexts/HouseholdContext';
-import { errorText, rpc, server, serverJson, rows } from '@/lib/control/client';
+
+import {
+  BellRing,
+  Check,
+  Clock3,
+  MessageCircleMore,
+  Plus,
+  RefreshCw,
+  Send,
+  Smartphone,
+  X,
+} from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+} from "react";
+import { useHousehold } from "@/contexts/HouseholdContext";
+import { normalizeSlots } from "@/lib/control/core";
+import { errorText, rpc, server, serverJson, rows } from "@/lib/control/client";
 import {
   currentPushSubscription,
   isStandalonePwa,
   pushSupported,
   serializePushSubscription,
   subscribeBrowserPush,
-} from '@/lib/push-client';
-import { Alert, button, Field, input, panel, secondary } from './FinanceControl';
+} from "@/lib/push-client";
+import { Alert, button, Field, input, panel, secondary } from "./FinanceControl";
 
 type Settings = {
   times: string[];
@@ -23,40 +41,67 @@ type Settings = {
   push_consented_at?: string | null;
 };
 
-type WhatsAppState = { configured: boolean; connected: boolean; qr?: string; message?: string };
-type Delivery = { id: string; day: string; slot: string; status: string; error_code: string | null; created_at: string };
+type WhatsAppState = {
+  configured: boolean;
+  connected: boolean;
+  qr?: string;
+  message?: string;
+};
+
+type Delivery = {
+  id: string;
+  day: string;
+  slot: string;
+  status: string;
+  error_code: string | null;
+  created_at: string;
+};
+
 type PushState = {
   configured: boolean;
   publicKey: string | null;
   enabled: boolean;
   consentedAt: string | null;
-  subscriptions: Array<{ id: string; device_label: string | null; last_seen_at: string; created_at: string }>;
+  subscriptions: Array<{
+    id: string;
+    device_label: string | null;
+    last_seen_at: string;
+    created_at: string;
+  }>;
   message?: string;
 };
 
 type PushDelivery = Delivery & { device_label?: string | null };
 
 const deliveryLabel: Record<string, string> = {
-  sent: 'Enviado',
-  failed: 'Falhou',
-  unknown: 'Resultado desconhecido',
-  sending: 'Enviando',
-  skipped: 'Dispensado',
+  sent: "Enviado",
+  failed: "Falhou",
+  unknown: "Resultado desconhecido",
+  sending: "Enviando",
+  skipped: "Dispensado",
 };
 
+const defaultTimes = ["08:00", "12:00", "18:00", "22:00"];
+
 function deviceLabel() {
-  if (typeof navigator === 'undefined') return 'Dispositivo';
+  if (typeof navigator === "undefined") return "Dispositivo";
   const ios = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-  return ios ? `iPhone / ${isStandalonePwa() ? 'PWA' : 'Safari'}` : 'Navegador / PWA';
+  return ios ? `iPhone / ${isStandalonePwa() ? "PWA" : "Safari"}` : "Navegador / PWA";
+}
+
+function validReminderTime(value: string) {
+  if (!/^\d{2}:\d{2}$/.test(value)) return false;
+  return value >= "08:00" && value <= "22:00";
 }
 
 export function ReminderSettings() {
   const { household, canWrite } = useHousehold();
-  const [times, setTimes] = useState('08:00, 12:00, 18:00, 22:00');
-  const [phone, setPhone] = useState('');
+  const [times, setTimes] = useState<string[]>(defaultTimes);
+  const [newTime, setNewTime] = useState("20:00");
+  const [phone, setPhone] = useState("");
   const [enabled, setEnabled] = useState(false);
   const [consent, setConsent] = useState(false);
-  const [timezone, setTimezone] = useState('America/Sao_Paulo');
+  const [timezone, setTimezone] = useState("America/Sao_Paulo");
   const [connection, setConnection] = useState<WhatsAppState | null>(null);
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [pushDeliveries, setPushDeliveries] = useState<PushDelivery[]>([]);
@@ -65,61 +110,86 @@ export function ReminderSettings() {
   const [standalone, setStandalone] = useState(false);
   const [busy, setBusy] = useState(false);
   const [pushBusy, setPushBusy] = useState(false);
-  const [error, setError] = useState('');
-  const [message, setMessage] = useState('');
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+
+  const sortedTimes = useMemo(() => normalizeSlots(times), [times]);
 
   const whatsappStatus = useCallback(async () => {
     try {
-      const next = await server<WhatsAppState>('/api/whatsapp', household.id);
-      setConnection((old) => ({ ...next, qr: next.connected ? undefined : next.qr ?? old?.qr }));
-    } catch (e) {
-      setError(errorText(e));
+      const next = await server<WhatsAppState>("/api/whatsapp", household.id);
+      setConnection((old) => ({
+        ...next,
+        qr: next.connected ? undefined : next.qr ?? old?.qr,
+      }));
+    } catch (caught) {
+      setError(errorText(caught));
     }
   }, [household.id]);
 
   const loadPushStatus = useCallback(async () => {
     try {
       const [state, subscription] = await Promise.all([
-        server<PushState>('/api/push', household.id),
+        server<PushState>("/api/push", household.id),
         currentPushSubscription(),
       ]);
       setPushState(state);
       setBrowserSubscription(subscription);
       setStandalone(isStandalonePwa());
-    } catch (e) {
-      setError(errorText(e));
+    } catch (caught) {
+      setError(errorText(caught));
     }
   }, [household.id]);
 
   const loadPushDeliveries = useCallback(async () => {
     try {
-      const list = await rows<PushDelivery>('pf_push_outbox', household.id);
-      setPushDeliveries(list.sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 30));
-    } catch (e) {
-      setError(errorText(e));
+      const list = await rows<PushDelivery>("pf_push_outbox", household.id);
+      setPushDeliveries(
+        list.sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 30),
+      );
+    } catch (caught) {
+      setError(errorText(caught));
     }
   }, [household.id]);
 
   useEffect(() => {
     let active = true;
-    void rpc<{ settings: Settings }>('pf_daily_state_v1', { p_household: household.id }).then((result) => {
-      if (active && result.settings) {
-        setTimes(result.settings.times.join(', '));
+
+    void rpc<{ settings: Settings }>("pf_daily_state_v1", {
+      p_household: household.id,
+    })
+      .then((result) => {
+        if (!active || !result.settings) return;
+        setTimes(normalizeSlots(result.settings.times));
         setTimezone(result.settings.timezone);
-        setPhone(result.settings.phone ?? '');
+        setPhone(result.settings.phone ?? "");
         setEnabled(result.settings.whatsapp_enabled);
         setConsent(Boolean(result.settings.consented_at));
-      }
-    }).catch((e) => setError(errorText(e)));
-    void rows<Delivery>('pf_reminder_outbox', household.id).then((list) => {
-      if (active) setDeliveries(list.sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 30));
-    }).catch((e) => setError(errorText(e)));
+      })
+      .catch((caught) => setError(errorText(caught)));
+
+    void rows<Delivery>("pf_reminder_outbox", household.id)
+      .then((list) => {
+        if (active) {
+          setDeliveries(
+            list.sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 30),
+          );
+        }
+      })
+      .catch((caught) => setError(errorText(caught)));
+
     void whatsappStatus();
+
     if (pushSupported()) {
       void loadPushStatus();
       void loadPushDeliveries();
-    } else setStandalone(isStandalonePwa());
-    return () => { active = false; };
+    } else {
+      setStandalone(isStandalonePwa());
+    }
+
+    return () => {
+      active = false;
+    };
   }, [household.id, loadPushDeliveries, loadPushStatus, whatsappStatus]);
 
   useEffect(() => {
@@ -128,40 +198,85 @@ export function ReminderSettings() {
     return () => clearInterval(id);
   }, [connection?.qr, connection?.connected, whatsappStatus]);
 
-  async function save(e: FormEvent) {
-    e.preventDefault();
+  function addTime() {
+    setError("");
+    setMessage("");
+
+    if (!validReminderTime(newTime)) {
+      setError("Escolha um horário entre 08:00 e 22:00.");
+      return;
+    }
+
+    if (times.includes(newTime)) {
+      setError("Este horário já foi adicionado.");
+      return;
+    }
+
+    setTimes(normalizeSlots([...times, newTime]));
+  }
+
+  function removeTime(value: string) {
+    if (times.length <= 1) {
+      setError("Mantenha pelo menos um horário de lembrete.");
+      return;
+    }
+    setError("");
+    setTimes((current) => current.filter((item) => item !== value));
+  }
+
+  function applyPreset(values: string[]) {
+    setError("");
+    setMessage("");
+    setTimes(normalizeSlots(values));
+  }
+
+  async function saveSettings() {
     if (!canWrite || busy) return;
     setBusy(true);
-    setError('');
-    setMessage('');
+    setError("");
+    setMessage("");
+
     try {
-      await rpc('pf_save_reminder_settings_v1', {
+      const normalized = normalizeSlots(times);
+      if (!normalized.length || normalized.some((value) => !validReminderTime(value))) {
+        throw new Error("Escolha pelo menos um horário entre 08:00 e 22:00.");
+      }
+
+      await rpc("pf_save_reminder_settings_v1", {
         p_household: household.id,
-        p_times: normalizeSlots(times.split(/[;,\n]/).map((item) => item.trim()).filter(Boolean)),
+        p_times: normalized,
         p_timezone: timezone,
         p_whatsapp: enabled,
-        p_phone: phone.replace(/\D/g, ''),
+        p_phone: phone.replace(/\D/g, ""),
         p_consent: consent,
       });
-      setMessage('Horarios salvos. Web Push e WhatsApp usam esta mesma agenda.');
-    } catch (e) {
-      setError(errorText(e));
+
+      setTimes(normalized);
+      setMessage("Agenda salva. As notificações usarão estes horários.");
+    } catch (caught) {
+      setError(errorText(caught));
     } finally {
       setBusy(false);
     }
   }
 
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    await saveSettings();
+  }
+
   async function whatsappAction(value: string) {
     if (busy) return;
     setBusy(true);
-    setError('');
-    setMessage('');
+    setError("");
+    setMessage("");
+
     try {
-      const result = await server<WhatsAppState>('/api/whatsapp', household.id, value);
+      const result = await server<WhatsAppState>("/api/whatsapp", household.id, value);
       setConnection(result);
-      setMessage(result.message ?? 'Solicitacao concluida.');
-    } catch (e) {
-      setError(errorText(e));
+      setMessage(result.message ?? "Solicitação concluída.");
+    } catch (caught) {
+      setError(errorText(caught));
     } finally {
       setBusy(false);
     }
@@ -170,26 +285,35 @@ export function ReminderSettings() {
   async function activatePush() {
     if (!canWrite || pushBusy) return;
     setPushBusy(true);
-    setError('');
-    setMessage('');
+    setError("");
+    setMessage("");
+
     try {
-      if (!pushSupported()) throw new Error('Este navegador nao oferece Web Push. No iPhone, abra a ferramenta pelo icone adicionado a Tela de Inicio.');
+      if (!pushSupported()) {
+        throw new Error(
+          "Este navegador não oferece Web Push. No iPhone, abra a ferramenta pelo ícone adicionado à Tela de Início.",
+        );
+      }
+
       const status = pushState;
-      if (!status?.configured || !status.publicKey) throw new Error('O Web Push ainda nao foi configurado na Vercel. Atualize o status depois de publicar as chaves desta atualizacao.');
-      // No iPhone a solicitacao de permissao precisa nascer diretamente do clique.
-      // Nao coloque nenhuma chamada de rede antes de subscribeBrowserPush().
+      if (!status?.configured || !status.publicKey) {
+        throw new Error("O Web Push ainda não foi configurado na Vercel.");
+      }
+
+      // No iPhone a solicitação de permissão precisa nascer diretamente do clique.
       const subscription = await subscribeBrowserPush(status.publicKey);
       const serialized = serializePushSubscription(subscription);
-      const result = await serverJson<{ message: string }>('/api/push', household.id, {
-        action: 'subscribe',
+      const result = await serverJson<{ message: string }>("/api/push", household.id, {
+        action: "subscribe",
         subscription: serialized,
         deviceLabel: deviceLabel(),
       });
+
       setBrowserSubscription(subscription);
       setMessage(result.message);
       await Promise.all([loadPushStatus(), loadPushDeliveries()]);
-    } catch (e) {
-      setError(errorText(e));
+    } catch (caught) {
+      setError(errorText(caught));
     } finally {
       setPushBusy(false);
     }
@@ -198,16 +322,17 @@ export function ReminderSettings() {
   async function testPush() {
     if (!browserSubscription || pushBusy) return;
     setPushBusy(true);
-    setError('');
-    setMessage('');
+    setError("");
+    setMessage("");
+
     try {
-      const result = await serverJson<{ message: string }>('/api/push', household.id, {
-        action: 'test',
+      const result = await serverJson<{ message: string }>("/api/push", household.id, {
+        action: "test",
         endpoint: browserSubscription.endpoint,
       });
       setMessage(result.message);
-    } catch (e) {
-      setError(errorText(e));
+    } catch (caught) {
+      setError(errorText(caught));
     } finally {
       setPushBusy(false);
     }
@@ -215,86 +340,337 @@ export function ReminderSettings() {
 
   async function disablePush() {
     if (!browserSubscription || pushBusy) return;
-    if (!confirm('Desativar notificacoes neste dispositivo?')) return;
+    if (!confirm("Desativar notificações neste dispositivo?")) return;
     setPushBusy(true);
-    setError('');
-    setMessage('');
+    setError("");
+    setMessage("");
+
     try {
       const endpoint = browserSubscription.endpoint;
-      const result = await serverJson<{ message: string }>('/api/push', household.id, { action: 'unsubscribe', endpoint });
+      const result = await serverJson<{ message: string }>("/api/push", household.id, {
+        action: "unsubscribe",
+        endpoint,
+      });
       await browserSubscription.unsubscribe().catch(() => false);
       setBrowserSubscription(null);
       setMessage(result.message);
       await loadPushStatus();
-    } catch (e) {
-      setError(errorText(e));
+    } catch (caught) {
+      setError(errorText(caught));
     } finally {
       setPushBusy(false);
     }
   }
 
   return (
-    <div className="space-y-5">
-      <section className={panel}>
-        <h1 className="text-2xl font-semibold">Lembretes e confirmacao diaria</h1>
-        <p className="mt-2 text-sm text-slate-600">Escolha horarios entre 08:00 e 22:00. Cada horario abre uma nova conferencia. O popup aparece tambem na primeira entrada de cada dia.</p>
-        <div className="my-4 space-y-2">
-          <Alert error={error}/>
-          {message && <p role="status" className="rounded-xl bg-emerald-50 p-3 text-sm">{message}</p>}
+    <div className="space-y-4 pb-8">
+      <div className="space-y-2">
+        <Alert error={error} />
+        {message && (
+          <p role="status" className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+            {message}
+          </p>
+        )}
+      </div>
+
+      <form className={panel} onSubmit={save}>
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#0D1B2A] text-[#C8A15A]">
+            <Clock3 size={19} />
+          </div>
+          <div>
+            <h2 className="font-sans text-base font-semibold text-[#0D1B2A]">Agenda</h2>
+            <p className="mt-0.5 text-xs text-[#3A3A3C]/55">
+              A Kyra lembra você nos horários que escolher.
+            </p>
+          </div>
         </div>
-        <form className="grid gap-4 md:grid-cols-2" onSubmit={save}>
-          <Field label="Horarios separados por virgula"><input required className={input} value={times} onChange={(e) => setTimes(e.target.value)}/></Field>
-          <Field label="Fuso horario"><select className={input} value={timezone} onChange={(e) => setTimezone(e.target.value)}><option>America/Sao_Paulo</option><option>America/Manaus</option><option>America/Rio_Branco</option><option>America/Fortaleza</option></select></Field>
-          <div className="flex flex-wrap gap-2 md:col-span-2"><button type="button" className={secondary} onClick={() => setTimes('21:00')}>1 vez ao dia</button><button type="button" className={secondary} onClick={() => setTimes('08:00, 12:00, 18:00, 22:00')}>4 horarios</button><button type="button" className={secondary} onClick={() => setTimes(Array.from({ length: 15 }, (_, i) => `${String(i + 8).padStart(2, '0')}:00`).join(', '))}>De hora em hora</button></div>
-          <Field label="Telefone que recebe o lembrete (pais + DDD + numero)"><input className={input} inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel"/></Field>
-          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)}/>Receber tambem no WhatsApp</label>
-          <label className="flex items-start gap-2 text-sm md:col-span-2"><input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)}/>Autorizo o envio dos lembretes para este numero. As mensagens nao incluem saldos nem detalhes financeiros.</label>
-          <div><button className={button} disabled={busy || !canWrite}>Salvar horarios</button></div>
-        </form>
-      </section>
+
+        <div className="mt-5 space-y-2">
+          {sortedTimes.map((time) => (
+            <div
+              key={time}
+              className="flex min-h-12 items-center justify-between gap-3 rounded-2xl border border-[#0D1B2A]/8 bg-[#F7F5EF] px-4"
+            >
+              <div className="flex items-center gap-3">
+                <BellRing size={17} className="text-[#9A773A]" />
+                <span className="text-base font-semibold tabular-nums text-[#0D1B2A]">{time}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => removeTime(time)}
+                className="flex h-9 w-9 items-center justify-center rounded-full text-[#3A3A3C]/45 transition hover:bg-white hover:text-red-700"
+                aria-label={`Remover horário ${time}`}
+              >
+                <X size={17} />
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-3 flex gap-2">
+          <input
+            type="time"
+            min="08:00"
+            max="22:00"
+            step="60"
+            value={newTime}
+            onChange={(event) => setNewTime(event.target.value)}
+            className="h-11 min-w-0 flex-1 rounded-xl border border-[#0D1B2A]/12 bg-white px-3 text-sm font-semibold text-[#0D1B2A] outline-none focus:border-[#C8A15A]"
+            aria-label="Novo horário"
+          />
+          <button
+            type="button"
+            onClick={addTime}
+            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-[#0D1B2A]/12 bg-white px-4 text-sm font-semibold text-[#0D1B2A]"
+          >
+            <Plus size={17} />
+            Adicionar
+          </button>
+        </div>
+
+        <div className="mt-4 flex gap-2 overflow-x-auto pb-1 app-scrollbar-none">
+          <button type="button" className={secondary} onClick={() => applyPreset(["21:00"])}>
+            1x ao dia
+          </button>
+          <button type="button" className={secondary} onClick={() => applyPreset(defaultTimes)}>
+            4x ao dia
+          </button>
+          <button
+            type="button"
+            className={secondary}
+            onClick={() =>
+              applyPreset(
+                Array.from({ length: 15 }, (_, index) => `${String(index + 8).padStart(2, "0")}:00`),
+              )
+            }
+          >
+            De hora em hora
+          </button>
+        </div>
+
+        <div className="mt-5 grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+          <Field label="Fuso horário">
+            <select
+              className={input}
+              value={timezone}
+              onChange={(event) => setTimezone(event.target.value)}
+            >
+              <option>America/Sao_Paulo</option>
+              <option>America/Manaus</option>
+              <option>America/Rio_Branco</option>
+              <option>America/Fortaleza</option>
+            </select>
+          </Field>
+          <button className={button} disabled={busy || !canWrite}>
+            {busy ? "Salvando..." : "Salvar agenda"}
+          </button>
+        </div>
+      </form>
 
       <section className={panel}>
-        <h2 className="text-xl font-semibold">Notificacoes no iPhone / PWA</h2>
-        <p className="mt-2 text-sm text-slate-600">Receba o lembrete como notificacao do proprio aplicativo, sem WhatsApp ou SMS. A mensagem nao inclui valores, compras ou dividas.</p>
-        <div className="mt-4 rounded-xl bg-[#F7F5EF] p-4 text-sm">
-          <p><strong>Servidor:</strong> {pushState?.configured ? 'Web Push configurado' : 'aguardando chaves Web Push'}</p>
-          <p><strong>Este dispositivo:</strong> {browserSubscription ? 'notificacoes ativas' : 'nao ativado'}</p>
-          <p><strong>Modo aplicativo:</strong> {standalone ? 'aberto pela Tela de Inicio' : 'navegador comum'}</p>
-          {pushState && <p><strong>Dispositivos ativos:</strong> {pushState.subscriptions.length}</p>}
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#0D1B2A] text-[#C8A15A]">
+              <Smartphone size={19} />
+            </div>
+            <div className="min-w-0">
+              <h2 className="font-sans text-base font-semibold text-[#0D1B2A]">Notificações neste iPhone</h2>
+              <p className="mt-0.5 text-xs text-[#3A3A3C]/55">
+                Web Push do próprio app, sem expor dados financeiros na mensagem.
+              </p>
+            </div>
+          </div>
+          <span
+            className={[
+              "inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-semibold",
+              browserSubscription
+                ? "bg-emerald-50 text-emerald-700"
+                : "bg-[#F7F5EF] text-[#3A3A3C]/60",
+            ].join(" ")}
+          >
+            {browserSubscription && <Check size={12} />}
+            {browserSubscription ? "Ativo" : "Inativo"}
+          </span>
         </div>
-        {!pushSupported() && <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Neste navegador o Web Push nao esta disponivel. No iPhone, use Safari → Compartilhar → Adicionar a Tela de Inicio e abra pelo novo icone.</p>}
-        {pushSupported() && !standalone && /iPhone|iPad|iPod/i.test(typeof navigator === 'undefined' ? '' : navigator.userAgent) && <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">No iPhone, a permissao de push funciona para o web app aberto pela Tela de Inicio. Se este atalho foi criado antes da atualizacao PWA, remova-o e adicione novamente depois do deploy.</p>}
+
+        <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+          <StatusCell label="Servidor" value={pushState?.configured ? "Configurado" : "Pendente"} />
+          <StatusCell label="Modo" value={standalone ? "App instalado" : "Navegador"} />
+          <StatusCell label="Dispositivo" value={browserSubscription ? "Autorizado" : "Não autorizado"} />
+          <StatusCell label="Ativos" value={String(pushState?.subscriptions.length ?? 0)} />
+        </div>
+
+        {!pushSupported() && (
+          <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+            No iPhone, adicione a Kyra à Tela de Início pelo Safari e abra pelo novo ícone.
+          </p>
+        )}
+
+        {pushSupported() &&
+          !standalone &&
+          /iPhone|iPad|iPod/i.test(typeof navigator === "undefined" ? "" : navigator.userAgent) && (
+            <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+              Abra a Kyra pelo ícone da Tela de Início para ativar notificações no iPhone.
+            </p>
+          )}
+
         <div className="mt-4 flex flex-wrap gap-2">
-          {!browserSubscription ? <button className={button} disabled={pushBusy || !canWrite || !pushSupported() || !pushState?.configured || !pushState.publicKey} onClick={() => void activatePush()}>{pushBusy ? 'Ativando...' : 'Ativar notificacoes neste dispositivo'}</button> : <>
-            <button className={button} disabled={pushBusy || !canWrite} onClick={() => void testPush()}>{pushBusy ? 'Enviando...' : 'Enviar notificacao de teste'}</button>
-            <button className={secondary} disabled={pushBusy || !canWrite} onClick={() => void disablePush()}>Desativar neste dispositivo</button>
-          </>}
-          <button className={secondary} disabled={pushBusy || !pushSupported()} onClick={() => void loadPushStatus()}>Atualizar status</button>
+          {!browserSubscription ? (
+            <button
+              className={button}
+              disabled={pushBusy || !canWrite || !pushSupported() || !pushState?.configured || !pushState.publicKey}
+              onClick={() => void activatePush()}
+            >
+              {pushBusy ? "Ativando..." : "Ativar neste dispositivo"}
+            </button>
+          ) : (
+            <>
+              <button className={button} disabled={pushBusy || !canWrite} onClick={() => void testPush()}>
+                <Send size={15} className="mr-1.5 inline" />
+                {pushBusy ? "Enviando..." : "Testar notificação"}
+              </button>
+              <button className={secondary} disabled={pushBusy || !canWrite} onClick={() => void disablePush()}>
+                Desativar
+              </button>
+            </>
+          )}
+          <button className={secondary} disabled={pushBusy || !pushSupported()} onClick={() => void loadPushStatus()}>
+            <RefreshCw size={15} className="mr-1.5 inline" />
+            Atualizar
+          </button>
         </div>
-        <p className="mt-3 text-xs text-slate-500">O push usa os horarios salvos acima. Se voce ja confirmou a conferencia depois daquele horario, a notificacao correspondente e dispensada.</p>
       </section>
 
-      <section className={panel}>
-        <h2 className="text-xl font-semibold">Ultimos envios por notificacao</h2>
-        <p className="my-2 text-xs text-slate-500">Cada dispositivo recebe no maximo uma tentativa por horario. Assinaturas expiradas sao desativadas automaticamente.</p>
-        {pushDeliveries.map((delivery) => <p className="border-t py-2 text-sm" key={delivery.id}>{delivery.day} {delivery.slot} | {deliveryLabel[delivery.status] ?? delivery.status}{delivery.error_code ? ` | ${delivery.error_code}` : ''}</p>)}
-        {!pushDeliveries.length && <p className="text-sm text-slate-500">Nenhum push automatico registrado ainda.</p>}
-      </section>
+      <details className={panel}>
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F7F5EF] text-[#0D1B2A]">
+              <BellRing size={18} />
+            </div>
+            <div>
+              <h2 className="font-sans text-base font-semibold text-[#0D1B2A]">Histórico de notificações</h2>
+              <p className="text-xs text-[#3A3A3C]/50">
+                {pushDeliveries.length ? `${pushDeliveries.length} envio(s) recente(s)` : "Nenhum envio automático ainda"}
+              </p>
+            </div>
+          </div>
+          <span className="text-xs font-semibold text-[#9A773A]">Ver</span>
+        </summary>
 
-      <section className={panel}>
-        <h2 className="text-xl font-semibold">Conectar meu WhatsApp por QR code</h2>
-        <p className="my-3 text-sm">{connection?.configured ? (connection.connected ? 'Conectado.' : 'Evolution configurada, WhatsApp ainda nao conectado.') : 'A infraestrutura externa da Evolution ainda precisa ser configurada. Esta etapa e opcional se voce usar Web Push.'}</p>
-        <p className="mb-4 text-xs text-slate-500">O Web Push acima nao depende do WhatsApp. Esta integracao permanece disponivel apenas como canal opcional.</p>
-        <div className="flex flex-wrap gap-2"><button disabled={busy || !canWrite || !connection?.configured} className={button} onClick={() => void whatsappAction('connect')}>Gerar / atualizar QR code</button><button disabled={busy || !canWrite || !connection?.connected} className={secondary} onClick={() => void whatsappAction('test')}>Enviar lembrete de teste</button><button disabled={busy || !canWrite || !connection?.configured} className={secondary} onClick={() => { if (confirm('Desconectar esta sessao do WhatsApp?')) void whatsappAction('logout'); }}>Desconectar</button><button className={secondary} onClick={() => void whatsappStatus()}>Verificar conexao</button></div>
-        {connection?.qr && !connection.connected && <div className="mt-4"><p className="mb-2 text-sm">No celular: WhatsApp / Aparelhos conectados / Conectar aparelho.</p><img src={connection.qr} alt="QR code temporario para conectar o WhatsApp" className="h-64 w-64 rounded-xl bg-white p-2" referrerPolicy="no-referrer"/></div>}
-      </section>
+        <div className="mt-4 space-y-2">
+          {pushDeliveries.map((delivery) => (
+            <div key={delivery.id} className="flex items-center justify-between gap-3 rounded-xl bg-[#F7F5EF] px-3 py-2 text-xs">
+              <span>{delivery.day} · {delivery.slot}</span>
+              <span className="font-semibold">
+                {deliveryLabel[delivery.status] ?? delivery.status}
+                {delivery.error_code ? ` · ${delivery.error_code}` : ""}
+              </span>
+            </div>
+          ))}
+          {!pushDeliveries.length && (
+            <p className="text-sm text-[#3A3A3C]/50">Nenhum push automático registrado ainda.</p>
+          )}
+        </div>
+      </details>
 
-      <section className={panel}>
-        <h2 className="text-xl font-semibold">Ultimos envios pelo WhatsApp</h2>
-        <p className="my-2 text-xs text-slate-500">Uma entrega por horario. Resultado desconhecido nao e reenviado automaticamente, para evitar duplicidade.</p>
-        {deliveries.map((delivery) => <p className="border-t py-2 text-sm" key={delivery.id}>{delivery.day} {delivery.slot} | {deliveryLabel[delivery.status] ?? delivery.status}{delivery.error_code ? ` | ${delivery.error_code}` : ''}</p>)}
-        {!deliveries.length && <p className="text-sm text-slate-500">Nenhum envio pelo WhatsApp registrado ainda.</p>}
-      </section>
+      <details className={panel}>
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F7F5EF] text-[#0D1B2A]">
+              <MessageCircleMore size={18} />
+            </div>
+            <div>
+              <h2 className="font-sans text-base font-semibold text-[#0D1B2A]">WhatsApp</h2>
+              <p className="text-xs text-[#3A3A3C]/50">Canal opcional</p>
+            </div>
+          </div>
+          <span className="text-xs font-semibold text-[#9A773A]">Configurar</span>
+        </summary>
+
+        <div className="mt-5 space-y-4">
+          <p className="text-sm text-[#3A3A3C]/60">
+            O Web Push acima funciona sem WhatsApp. Use este canal somente se quiser uma segunda forma de lembrete.
+          </p>
+
+          <Field label="Telefone (país + DDD + número)">
+            <input
+              className={input}
+              inputMode="tel"
+              value={phone}
+              onChange={(event) => setPhone(event.target.value)}
+              autoComplete="tel"
+            />
+          </Field>
+
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />
+            Receber também no WhatsApp
+          </label>
+          <label className="flex items-start gap-2 text-sm">
+            <input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} />
+            Autorizo o envio dos lembretes para este número. As mensagens não incluem saldos nem detalhes financeiros.
+          </label>
+
+          <p className="text-sm">
+            {connection?.configured
+              ? connection.connected
+                ? "WhatsApp conectado."
+                : "Evolution configurada; WhatsApp ainda não conectado."
+              : "Infraestrutura externa não configurada."}
+          </p>
+
+          <div className="flex flex-wrap gap-2">
+            <button type="button" disabled={busy || !canWrite} className={button} onClick={() => void saveSettings()}>
+              {busy ? "Salvando..." : "Salvar WhatsApp"}
+            </button>
+            <button type="button" disabled={busy || !canWrite || !connection?.configured} className={secondary} onClick={() => void whatsappAction("connect")}>
+              Gerar QR code
+            </button>
+            <button type="button" disabled={busy || !canWrite || !connection?.connected} className={secondary} onClick={() => void whatsappAction("test")}>
+              Testar
+            </button>
+            <button type="button" className={secondary} onClick={() => void whatsappStatus()}>
+              Atualizar status
+            </button>
+          </div>
+
+          {connection?.qr && !connection.connected && (
+            <div>
+              <p className="mb-2 text-sm">WhatsApp → Aparelhos conectados → Conectar aparelho.</p>
+              <img
+                src={connection.qr}
+                alt="QR code temporário para conectar o WhatsApp"
+                className="h-64 w-64 rounded-xl bg-white p-2"
+                referrerPolicy="no-referrer"
+              />
+            </div>
+          )}
+
+          {deliveries.length > 0 && (
+            <details className="rounded-xl border border-[#0D1B2A]/8 bg-[#F7F5EF] p-3">
+              <summary className="cursor-pointer text-sm font-semibold">Últimos envios pelo WhatsApp</summary>
+              <div className="mt-2 space-y-1 text-xs">
+                {deliveries.map((delivery) => (
+                  <p key={delivery.id}>
+                    {delivery.day} {delivery.slot} · {deliveryLabel[delivery.status] ?? delivery.status}
+                    {delivery.error_code ? ` · ${delivery.error_code}` : ""}
+                  </p>
+                ))}
+              </div>
+            </details>
+          )}
+        </div>
+      </details>
+    </div>
+  );
+}
+
+function StatusCell({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl bg-[#F7F5EF] px-3 py-2.5">
+      <p className="text-[10px] uppercase tracking-wide text-[#3A3A3C]/45">{label}</p>
+      <p className="mt-0.5 truncate font-semibold text-[#0D1B2A]">{value}</p>
     </div>
   );
 }

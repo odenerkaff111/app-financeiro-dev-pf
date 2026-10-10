@@ -470,20 +470,6 @@ export function AiSettingsPanel() {
 
   return (
     <div className="space-y-6 pb-10">
-      <header>
-        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#C8A15A]">
-          Configurações
-        </p>
-
-        <h1 className="mt-2 text-3xl font-semibold text-[#0D1B2A]">
-          Inteligência Artificial
-        </h1>
-
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-[#3A3A3C]/65">
-          Controle o modelo usado pelo assistente e acompanhe o consumo deste aplicativo.
-        </p>
-      </header>
-
       {error && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}

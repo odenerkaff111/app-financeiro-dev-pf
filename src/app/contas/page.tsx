@@ -577,32 +577,16 @@ export default function AccountsPage() {
 
   return (
     <div className="space-y-6 pb-10">
-      <section className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#C8A15A]">
-            Organização financeira
-          </p>
-
-          <h1 className="mt-2 text-3xl font-semibold text-[#0D1B2A] sm:text-4xl">
-            Contas e cartões
-          </h1>
-
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-[#3A3A3C]/70">
-            Registre onde seu dinheiro está,
-            seus cartões e seus investimentos.
-          </p>
-        </div>
-
+      <div className="flex justify-end">
         <button
           type="button"
           onClick={openCreateModal}
-          className="flex h-11 items-center justify-center gap-2 rounded-xl bg-[#0D1B2A] px-5 text-sm font-semibold text-[#F7F5EF] shadow-lg transition hover:-translate-y-0.5 hover:bg-[#172D43]"
+          className="app-primary-button px-4"
         >
           <Plus size={18} />
-
           Nova conta
         </button>
-      </section>
+      </div>
 
       {error && !modalOpen && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

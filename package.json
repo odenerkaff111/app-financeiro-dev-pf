@@ -8,14 +8,14 @@
     "start": "next start",
     "lint": "eslint",
     "test:control": "node tests/run-control-tests.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:security": "node tests/run-api-security-tests.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.99.2",
     "date-fns": "^4.1.0",
     "lucide-react": "^0.577.0",
     "next": "16.2.0",
-    "nodemailer": "^8.0.3",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "recharts": "^3.8.0"
@@ -23,7 +23,6 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
-    "@types/nodemailer": "^7.0.11",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",

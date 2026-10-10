@@ -4,6 +4,7 @@ import Link from "next/link";
 import {
   CalendarClock,
   CheckCircle2,
+  ChevronDown,
   CreditCard,
   HandCoins,
   Loader2,
@@ -89,7 +90,8 @@ export function DebtSummarySection() {
   }, [household.id]);
 
   useEffect(() => {
-    void loadDebts();
+    const task = window.setTimeout(() => void loadDebts(), 0);
+    return () => window.clearTimeout(task);
   }, [loadDebts]);
 
   useEffect(() => {
@@ -196,89 +198,97 @@ export function DebtSummarySection() {
 
   return (
     <section className="rounded-2xl border border-[#0D1B2A]/10 bg-white p-5 shadow-sm">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-xl font-semibold tracking-tight text-[#0D1B2A]">
-            Resumo das dívidas
-          </h2>
-          <p className="mt-1 text-sm text-[#3A3A3C]/60">
-            Posição consolidada, juros e ritmo atual do endividamento.
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#3A3A3C]/45">
+            Dívidas
+          </p>
+          <p className={[
+            "mt-1 text-2xl font-semibold tracking-tight",
+            summary.total > 0 ? "text-red-800" : "text-emerald-800",
+          ].join(" ")}>
+            {formatCurrency(summary.total)}
+          </p>
+          <p className="mt-1 text-xs text-[#3A3A3C]/55">
+            {summary.monthly > 0
+              ? `${formatCurrency(summary.monthly)}/mês em compromissos cadastrados`
+              : "Sem compromisso mensal cadastrado"}
           </p>
         </div>
 
         <Link
           href="/dividas"
-          className="text-sm font-semibold text-[#0D1B2A] hover:underline"
+          className="shrink-0 rounded-xl bg-[#F7F5EF] px-3 py-2 text-xs font-semibold text-[#0D1B2A]"
         >
           Ver todas
         </Link>
       </div>
 
-      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
-        <DashboardDebtCard
-          label="Total atualizado"
-          value={formatCurrency(summary.total)}
-          icon={HandCoins}
-          negative={summary.total > 0}
-        />
+      <details className="group mt-4 border-t border-[#0D1B2A]/8 pt-3">
+        <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-[#0D1B2A]">
+          Ver detalhamento
+          <ChevronDown size={17} className="transition-transform group-open:rotate-180" />
+        </summary>
 
-        <DashboardDebtCard
-          label="Dívidas pessoais"
-          value={formatCurrency(summary.personal)}
-          icon={UsersRound}
-        />
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <DashboardDebtCard
+            label="Dívidas pessoais"
+            value={formatCurrency(summary.personal)}
+            icon={UsersRound}
+          />
 
-        <DashboardDebtCard
-          label="Outras dívidas"
-          value={formatCurrency(summary.other)}
-          detail={
-            summary.creditCards > 0
-              ? `Cartões: ${formatCurrency(summary.creditCards)}`
-              : "Sem fatura de cartão mapeada"
-          }
-          icon={CreditCard}
-        />
+          <DashboardDebtCard
+            label="Outras dívidas"
+            value={formatCurrency(summary.other)}
+            detail={
+              summary.creditCards > 0
+                ? `Cartões: ${formatCurrency(summary.creditCards)}`
+                : "Sem fatura de cartão mapeada"
+            }
+            icon={CreditCard}
+          />
 
-        <DashboardDebtCard
-          label="Juros e encargos"
-          value={formatCurrency(summary.interestAndCharges)}
-          detail={
-            summary.dailyGrowth > 0
-              ? `+${formatCurrency(summary.dailyGrowth)}/dia`
-              : "Sem crescimento diário calculado"
-          }
-          icon={TrendingUp}
-          negative={summary.interestAndCharges > 0 || summary.dailyGrowth > 0}
-        />
+          <DashboardDebtCard
+            label="Juros e encargos"
+            value={formatCurrency(summary.interestAndCharges)}
+            detail={
+              summary.dailyGrowth > 0
+                ? `+${formatCurrency(summary.dailyGrowth)}/dia`
+                : "Sem crescimento diário calculado"
+            }
+            icon={TrendingUp}
+            negative={summary.interestAndCharges > 0 || summary.dailyGrowth > 0}
+          />
 
-        <DashboardDebtCard
-          label="Compromisso mensal"
-          value={formatCurrency(summary.monthly)}
-          detail={`${summary.remainingInstallments} parcelas restantes`}
-          icon={CalendarClock}
-        />
+          <DashboardDebtCard
+            label="Compromisso mensal"
+            value={formatCurrency(summary.monthly)}
+            detail={`${summary.remainingInstallments} parcelas restantes`}
+            icon={CalendarClock}
+          />
 
-        <DashboardDebtCard
-          label="Já pago"
-          value={formatCurrency(summary.paid)}
-          detail={`${summary.progress.toFixed(1)}% do valor original`}
-          icon={CheckCircle2}
-          positive
-        />
-      </div>
-
-      <div className="mt-5 flex items-center gap-3">
-        <WalletCards size={15} className="shrink-0 text-[#C8A15A]" />
-        <div className="h-2 flex-1 overflow-hidden rounded-full bg-[#0D1B2A]/8">
-          <div
-            className="h-full rounded-full bg-emerald-600"
-            style={{ width: `${Math.min(100, Math.max(0, summary.progress))}%` }}
+          <DashboardDebtCard
+            label="Já pago"
+            value={formatCurrency(summary.paid)}
+            detail={`${summary.progress.toFixed(1)}% do valor original`}
+            icon={CheckCircle2}
+            positive
           />
         </div>
-        <span className="text-xs font-semibold text-[#3A3A3C]/60">
-          {summary.progress.toFixed(1)}%
-        </span>
-      </div>
+
+        <div className="mt-4 flex items-center gap-3">
+          <WalletCards size={15} className="shrink-0 text-[#C8A15A]" />
+          <div className="h-2 flex-1 overflow-hidden rounded-full bg-[#0D1B2A]/8">
+            <div
+              className="h-full rounded-full bg-emerald-600"
+              style={{ width: `${Math.min(100, Math.max(0, summary.progress))}%` }}
+            />
+          </div>
+          <span className="text-xs font-semibold text-[#3A3A3C]/60">
+            {summary.progress.toFixed(1)}%
+          </span>
+        </div>
+      </details>
     </section>
   );
 }

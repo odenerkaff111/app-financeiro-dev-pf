@@ -59,7 +59,8 @@ export function CommitmentsPanel({ direction }: Props) {
   }, [direction, household.id]);
 
   useEffect(() => {
-    void loadData();
+    const task = window.setTimeout(() => void loadData(), 0);
+    return () => window.clearTimeout(task);
   }, [loadData]);
 
   const filteredItems = useMemo(() => {
@@ -90,27 +91,15 @@ export function CommitmentsPanel({ direction }: Props) {
 
   return (
     <div className="space-y-6 pb-10">
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#C8A15A]">
-            Acompanhamento
-          </p>
-          <h1 className="mt-2 text-3xl font-semibold text-[#0D1B2A] sm:text-4xl">
-            {isPayable ? "Contas a pagar" : "Valores a receber"}
-          </h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-[#3A3A3C]/65">
-            Consulte total, liquidações e saldo restante. O cadastro e os pagamentos são feitos em Movimentações ou pelo Assistente.
-          </p>
-        </div>
-
+      <div className="flex justify-end">
         <Link
           href="/registros"
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#0D1B2A] px-5 text-sm font-semibold text-white"
+          className="app-primary-button px-4"
         >
           Novo registro
           <ArrowRight size={16} />
         </Link>
-      </header>
+      </div>
 
       {error && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

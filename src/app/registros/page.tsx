@@ -3,6 +3,7 @@
 import Link from "next/link";
 import {
   type FormEvent,
+  type ReactNode,
   useCallback,
   useEffect,
   useMemo,
@@ -18,6 +19,8 @@ import {
   PiggyBank,
   Plus,
   Search,
+  SlidersHorizontal,
+  RotateCcw,
   Trash2,
   TrendingDown,
   TrendingUp,
@@ -37,6 +40,7 @@ import { supabase, getSessionOnce } from "@/lib/supabase";
 import { useHousehold } from "@/contexts/HouseholdContext";
 import { UnifiedFinancialEntryModal } from "@/components/finance/UnifiedFinancialEntryModal";
 import { KyraSelect } from "@/components/ui/KyraSelect";
+import { BottomSheet } from "@/components/ui/BottomSheet";
 
 type AccountType =
   | "checking"
@@ -472,6 +476,7 @@ export default function TransactionsPage() {
   );
 
   const [search, setSearch] = useState("");
+  const [filterOpen, setFilterOpen] = useState(false);
 
   const [periodFilter, setPeriodFilter] = useState<
     "week" | "month" | "next_month" | "year" | "custom" | "all"
@@ -1308,30 +1313,43 @@ export default function TransactionsPage() {
 
   return (
     <div className="space-y-6 pb-10">
-      <section className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#C8A15A]">
-            Financeiro do dia a dia
-          </p>
-
-          <h1 className="mt-2 text-3xl font-semibold text-[#0D1B2A] sm:text-4xl">
-            Movimentações
-          </h1>
-
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-[#3A3A3C]/70">
-            Esta é a porta única para registrar movimentações, contas, recebíveis e dívidas.
-          </p>
+      <section className="app-toolbar flex items-center gap-2 p-2.5">
+        <div className="relative min-w-0 flex-1">
+          <Search
+            size={18}
+            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#3A3A3C]/40"
+          />
+          <input
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Buscar movimentações"
+            className="h-11 w-full rounded-xl border border-transparent bg-[#F7F5EF] pl-10 pr-3 text-sm text-[#0D1B2A] outline-none transition focus:border-[#C8A15A]/50 focus:bg-white"
+          />
         </div>
+
+        <button
+          type="button"
+          onClick={() => setFilterOpen(true)}
+          className="app-icon-button relative shrink-0"
+          aria-label="Abrir filtros"
+          title="Filtros"
+        >
+          <SlidersHorizontal size={18} />
+          {(periodFilter !== "month" || typeFilter !== "all" || statusFilter !== "all" || sortMode !== "period_desc") && (
+            <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-[#C8A15A]" />
+          )}
+        </button>
 
         <button
           type="button"
           onClick={openCreateModal}
           disabled={!canWrite}
-          className="flex h-11 items-center justify-center gap-2 rounded-xl bg-[#0D1B2A] px-5 text-sm font-semibold text-[#F7F5EF] shadow-lg transition hover:-translate-y-0.5 hover:bg-[#172D43] disabled:cursor-not-allowed disabled:opacity-50"
+          className="app-primary-button h-11 shrink-0 px-3 sm:px-4"
+          aria-label="Novo registro"
         >
           <Plus size={18} />
-
-          Novo registro
+          <span className="hidden sm:inline">Novo registro</span>
         </button>
       </section>
 
@@ -1361,109 +1379,128 @@ export default function TransactionsPage() {
           </div>
         )}
 
-      <section className="grid grid-cols-1 gap-3 rounded-2xl border border-[#0D1B2A]/10 bg-white/80 p-4 shadow-sm md:grid-cols-[minmax(220px,1fr)_auto_auto_auto_auto]">
-        <div className="relative">
-          <Search
-            size={18}
-            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#3A3A3C]/45"
-          />
-
-          <input
-            type="search"
-            value={search}
-            onChange={(event) =>
-              setSearch(
-                event.target.value,
-              )
-            }
-            placeholder="Buscar descrição, estabelecimento ou categoria..."
-            className="h-11 w-full rounded-xl border border-[#0D1B2A]/12 bg-white pl-10 pr-4 text-sm text-[#0D1B2A] outline-none transition focus:border-[#C8A15A] focus:ring-2 focus:ring-[#C8A15A]/20"
-          />
-        </div>
-
-        <KyraSelect
-          value={periodFilter}
-          onChange={(value) =>
-            setPeriodFilter(
-              value as "week" | "month" | "next_month" | "year" | "custom" | "all",
-            )
-          }
-          ariaLabel="Período"
-          options={[
-            { value: "week", label: "Esta semana" },
-            { value: "month", label: "Este mês" },
-            { value: "next_month", label: "Próximo mês" },
-            { value: "year", label: "Este ano" },
-            { value: "custom", label: "Personalizado" },
-            { value: "all", label: "Todo o histórico" },
-          ]}
-        />
-
-        <KyraSelect
-          value={typeFilter}
-          onChange={(value) => setTypeFilter(value as "all" | TransactionType)}
-          ariaLabel="Tipo"
-          options={[
-            { value: "all", label: "Todos os tipos" },
-            ...TYPE_OPTIONS.map((option) => ({ value: option.value, label: option.label })),
-          ]}
-        />
-
-        <KyraSelect
-          value={statusFilter}
-          onChange={(value) => setStatusFilter(value as "all" | TransactionStatus)}
-          ariaLabel="Status"
-          options={[
-            { value: "all", label: "Todos os status" },
-            { value: "paid", label: "Realizados" },
-            { value: "planned", label: "Planejados" },
-            { value: "overdue", label: "Atrasados" },
-            { value: "cancelled", label: "Cancelados" },
-          ]}
-        />
-
-        <KyraSelect
-          value={sortMode}
-          onChange={(value) =>
-            setSortMode(value as "period_desc" | "period_asc" | "registered_desc" | "value_desc")
-          }
-          ariaLabel="Ordenação"
-          options={[
-            { value: "period_desc", label: "Período: mais recente" },
-            { value: "period_asc", label: "Período: mais próximo" },
-            { value: "registered_desc", label: "Cadastro: mais recente" },
-            { value: "value_desc", label: "Maior valor" },
-          ]}
-        />
-
-        {periodFilter === "custom" && (
-          <div className="grid grid-cols-1 gap-3 rounded-xl border border-[#0D1B2A]/10 bg-[#F7F5EF] p-3 md:col-span-5 sm:grid-cols-2">
-            <label className="space-y-1">
-              <span className="text-xs font-medium text-[#0D1B2A]/65">De</span>
-              <input
-                type="date"
-                value={customStart}
-                onChange={(event) => setCustomStart(event.target.value)}
-                className="h-10 w-full rounded-lg border border-[#0D1B2A]/12 bg-white px-3 text-sm text-[#0D1B2A] outline-none focus:border-[#C8A15A]"
-              />
-            </label>
-            <label className="space-y-1">
-              <span className="text-xs font-medium text-[#0D1B2A]/65">Até</span>
-              <input
-                type="date"
-                value={customEnd}
-                onChange={(event) => setCustomEnd(event.target.value)}
-                className="h-10 w-full rounded-lg border border-[#0D1B2A]/12 bg-white px-3 text-sm text-[#0D1B2A] outline-none focus:border-[#C8A15A]"
-              />
-            </label>
-            {customStart && customEnd && customStart > customEnd && (
-              <p className="text-xs text-red-600 sm:col-span-2">
-                A data inicial precisa ser anterior ou igual à data final.
-              </p>
-            )}
+      <BottomSheet
+        open={filterOpen}
+        onClose={() => setFilterOpen(false)}
+        title="Filtrar movimentações"
+        footer={
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setPeriodFilter("month");
+                setTypeFilter("all");
+                setStatusFilter("all");
+                setSortMode("period_desc");
+                setCustomStart(getToday());
+                setCustomEnd(getToday());
+              }}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-[#0D1B2A]/12 bg-white px-4 text-sm font-semibold text-[#0D1B2A]"
+            >
+              <RotateCcw size={16} />
+              Limpar
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterOpen(false)}
+              className="app-primary-button flex-1 px-4"
+            >
+              Aplicar filtros
+            </button>
           </div>
-        )}
-      </section>
+        }
+      >
+        <div className="space-y-5">
+          <FilterField label="Período">
+            <KyraSelect
+              value={periodFilter}
+              onChange={(value) =>
+                setPeriodFilter(value as "week" | "month" | "next_month" | "year" | "custom" | "all")
+              }
+              ariaLabel="Período"
+              options={[
+                { value: "week", label: "Esta semana" },
+                { value: "month", label: "Este mês" },
+                { value: "next_month", label: "Próximo mês" },
+                { value: "year", label: "Este ano" },
+                { value: "custom", label: "Personalizado" },
+                { value: "all", label: "Todo o histórico" },
+              ]}
+            />
+          </FilterField>
+
+          {periodFilter === "custom" && (
+            <div className="grid grid-cols-2 gap-2">
+              <label className="space-y-1.5 text-xs font-medium text-[#3A3A3C]/65">
+                <span>De</span>
+                <input
+                  type="date"
+                  value={customStart}
+                  onChange={(event) => setCustomStart(event.target.value)}
+                  className="h-11 w-full rounded-xl border border-[#0D1B2A]/12 bg-white px-3 text-sm text-[#0D1B2A] outline-none focus:border-[#C8A15A]"
+                />
+              </label>
+              <label className="space-y-1.5 text-xs font-medium text-[#3A3A3C]/65">
+                <span>Até</span>
+                <input
+                  type="date"
+                  value={customEnd}
+                  onChange={(event) => setCustomEnd(event.target.value)}
+                  className="h-11 w-full rounded-xl border border-[#0D1B2A]/12 bg-white px-3 text-sm text-[#0D1B2A] outline-none focus:border-[#C8A15A]"
+                />
+              </label>
+              {customStart && customEnd && customStart > customEnd && (
+                <p className="col-span-2 text-xs text-red-600">
+                  A data inicial precisa ser anterior ou igual à data final.
+                </p>
+              )}
+            </div>
+          )}
+
+          <FilterField label="Tipo">
+            <KyraSelect
+              value={typeFilter}
+              onChange={(value) => setTypeFilter(value as "all" | TransactionType)}
+              ariaLabel="Tipo"
+              options={[
+                { value: "all", label: "Todos os tipos" },
+                ...TYPE_OPTIONS.map((option) => ({ value: option.value, label: option.label })),
+              ]}
+            />
+          </FilterField>
+
+          <FilterField label="Status">
+            <KyraSelect
+              value={statusFilter}
+              onChange={(value) => setStatusFilter(value as "all" | TransactionStatus)}
+              ariaLabel="Status"
+              options={[
+                { value: "all", label: "Todos os status" },
+                { value: "paid", label: "Realizados" },
+                { value: "planned", label: "Planejados" },
+                { value: "overdue", label: "Atrasados" },
+                { value: "cancelled", label: "Cancelados" },
+              ]}
+            />
+          </FilterField>
+
+          <FilterField label="Ordenação">
+            <KyraSelect
+              value={sortMode}
+              onChange={(value) =>
+                setSortMode(value as "period_desc" | "period_asc" | "registered_desc" | "value_desc")
+              }
+              ariaLabel="Ordenação"
+              options={[
+                { value: "period_desc", label: "Período: mais recente" },
+                { value: "period_asc", label: "Período: mais próximo" },
+                { value: "registered_desc", label: "Cadastro: mais recente" },
+                { value: "value_desc", label: "Maior valor" },
+              ]}
+            />
+          </FilterField>
+        </div>
+      </BottomSheet>
 
       {loading ? (
         <div className="flex min-h-64 items-center justify-center">
@@ -2035,6 +2072,15 @@ export default function TransactionsPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function FilterField({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#3A3A3C]/45">{label}</p>
+      {children}
     </div>
   );
 }

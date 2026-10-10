@@ -25,6 +25,8 @@ if ($LASTEXITCODE -ne 0) { throw 'Testes falharam. Publicacao interrompida.' }
 if ($LASTEXITCODE -ne 0) { throw 'Testes do dashboard falharam. Publicacao interrompida.' }
 & node tests/run-push-tests.mjs
 if ($LASTEXITCODE -ne 0) { throw 'Testes de PWA/Web Push falharam. Publicacao interrompida.' }
+& npm.cmd run test:security
+if ($LASTEXITCODE -ne 0) { throw 'Testes de seguranca de API falharam. Publicacao interrompida.' }
 & git add -- $paths
 if ($LASTEXITCODE -ne 0) { throw 'Nao foi possivel preparar os arquivos da atualizacao.' }
 $staged = @(& git diff --cached --name-only)
@@ -36,7 +38,7 @@ if (!$staged.Count) {
 }
 foreach ($name in $staged) { if ($paths -notcontains $name) { throw "Arquivo nao autorizado no staging: $name. Revise antes de publicar." } }
 & git diff --cached --stat
-& git commit -m 'feat: adicionar PWA e notificacoes Web Push'
+& git commit -m 'feat: polir experiencia mobile da Kyra'
 if ($LASTEXITCODE -ne 0) { throw 'Commit falhou. Confira a configuracao de nome/e-mail do Git.' }
 & git push -u origin $branch
 if ($LASTEXITCODE -ne 0) { throw 'Commit criado, mas push falhou. Resolva autenticacao/conflitos e repita git push.' }

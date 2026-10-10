@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import {
   CircleDollarSign,
@@ -113,8 +114,15 @@ export function AppDock() {
             className="hidden min-w-[132px] shrink-0 items-center gap-2 lg:flex"
             aria-label="Ir para o painel"
           >
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#C8A15A]/35 bg-white/5 text-[#C8A15A]">
-              <CircleDollarSign size={19} strokeWidth={2.2} />
+            <span className="flex h-9 w-9 overflow-hidden rounded-xl border border-[#C8A15A]/30 bg-white shadow-sm">
+              <Image
+                src="/icons/icon-192.png"
+                alt=""
+                width={36}
+                height={36}
+                priority
+                className="h-full w-full object-cover"
+              />
             </span>
             <span className="leading-none">
               <span className="block text-[13px] font-bold tracking-[0.12em] text-white">
@@ -185,8 +193,15 @@ export function AppDock() {
 
       <header className="fixed inset-x-0 top-0 z-[120] flex h-14 items-center justify-between border-b border-[#C8A15A]/20 bg-[#071321]/[0.98] px-3 shadow-sm backdrop-blur-2xl md:hidden">
         <Link href="/" className="flex items-center gap-2" aria-label="Ir para o painel">
-          <span className="flex h-8 w-8 items-center justify-center rounded-xl border border-[#C8A15A]/35 bg-white/5 text-[#C8A15A]">
-            <CircleDollarSign size={17} strokeWidth={2.2} />
+          <span className="flex h-8 w-8 overflow-hidden rounded-xl border border-[#C8A15A]/30 bg-white shadow-sm">
+            <Image
+              src="/icons/icon-192.png"
+              alt=""
+              width={32}
+              height={32}
+              priority
+              className="h-full w-full object-cover"
+            />
           </span>
           <span className="text-xs font-bold tracking-[0.12em] text-white">KYRA</span>
         </Link>
