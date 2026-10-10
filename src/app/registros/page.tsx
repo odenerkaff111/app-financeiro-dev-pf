@@ -119,6 +119,8 @@ type Transaction = {
   source: TransactionSource;
   notes: string | null;
   metadata: Record<string, unknown> | null;
+  card_statement_id: string | null;
+  card_forecast: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -665,6 +667,19 @@ export default function TransactionsPage() {
       .toLowerCase();
 
     const filtered = transactions.filter((transaction) => {
+      // Itens das faturas pertencem as telas do cartao. Aqui fica somente
+      // o movimento de caixa real (inclusive o PIX unico que paga a fatura).
+      // Previsoes ainda nao cobradas do credito ficam em Recorrentes.
+      const creditCardDetail = Boolean(
+        transaction.card_statement_id ||
+        transaction.card_forecast ||
+        (transaction.type === "expense" && (
+          transaction.metadata?.third_party_card === true ||
+          transaction.metadata?.third_party_statement_id ||
+          transaction.metadata?.payment_method === "credit_card"
+        ))
+      );
+      if (creditCardDetail) return false;
 
       const category = transaction.category_id
         ? categoryMap.get(transaction.category_id)
@@ -1352,6 +1367,15 @@ export default function TransactionsPage() {
           <span className="hidden sm:inline">Novo registro</span>
         </button>
       </section>
+
+      <nav aria-label="Detalhes de faturas" className="-mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 px-1 text-[11px] font-semibold">
+        <Link href="/registros/obrigacoes" className="inline-flex items-center gap-1.5 text-[#0D1B2A]/65 hover:text-[#0D1B2A]">
+          <CreditCard size={14} aria-hidden="true" /> Faturas dos meus cartões
+        </Link>
+        <Link href="/dividas/cartoes-terceiros" className="inline-flex items-center gap-1.5 text-[#0D1B2A]/65 hover:text-[#0D1B2A]">
+          <CreditCard size={14} aria-hidden="true" /> Cartões emprestados
+        </Link>
+      </nav>
 
       {pageError && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

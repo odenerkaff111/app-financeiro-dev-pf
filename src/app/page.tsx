@@ -16,7 +16,6 @@ import {
   Eye,
   EyeOff,
   Loader2,
-  PiggyBank,
   Receipt,
   Wallet,
 } from "lucide-react";
@@ -42,6 +41,7 @@ import { rowResult } from "@/lib/control/client";
 import { summarizeBalances, summarizePeriod, transactionDay, uncommittedBudget, type DashboardLoan, type DashboardStatement } from "@/lib/dashboard/summary";
 import { useHousehold } from "@/contexts/HouseholdContext";
 import { SpendingCategoryChart } from "@/components/dashboard/SpendingCategoryChart";
+import { BankBalanceOverview } from "@/components/dashboard/BankBalanceOverview";
 import { DebtSummarySection } from "@/components/DebtSummarySection";
 import { MonthlyClosingSection } from "@/components/MonthlyClosingSection";
 
@@ -842,46 +842,43 @@ export default function DashboardPage() {
         </div>
 
         <div className={privateDataClass}>
-        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
-          <article className="rounded-2xl border border-[#0D1B2A]/10 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between gap-3"><p className="text-sm text-[#3A3A3C]/65">Saldo</p><Wallet size={19} /></div>
-            <dl className="mt-3 space-y-3 text-sm">
-              <div><dt className="text-xs text-[#3A3A3C]/60">Em contas</dt><dd className="text-2xl font-semibold text-[#0D1B2A]">{formatCurrency(balances.cash)}</dd></div>
-              <div className="flex flex-wrap justify-between gap-1 border-t border-[#0D1B2A]/10 pt-2"><dt>Limite de cartões</dt><dd className="font-semibold">{formatCurrency(balances.credit)}</dd></div>
-              <div className="flex flex-wrap justify-between gap-1"><dt>Cofrinhos / reservas</dt><dd className="font-semibold">{formatCurrency(balances.invested)}</dd></div>
-            </dl>
-            <details className="mt-3 text-xs text-[#3A3A3C]/70">
-              <summary className="cursor-pointer font-medium">Ver por conta</summary>
-              <div className="mt-2 space-y-2">{[...balances.banks, ...balances.cards, ...balances.reserves].map(a => <div key={a.id} className="flex justify-between gap-2"><span>{a.name}{a.type === "credit_card" ? " (limite)" : ""}</span><strong className="whitespace-nowrap">{a.type === "credit_card" && a.available_credit == null ? "Não informado" : formatCurrency(a.type === "credit_card" ? Number(a.available_credit) : Number(a.balance))}</strong></div>)}</div>
-            </details>
-          </article>
-
-          <FlowMetricCard
-            income={metrics.income}
-            expense={metrics.expense}
+        <div className="mt-4 space-y-4">
+          <BankBalanceOverview
+            banks={balances.banks}
+            cards={balances.cards}
+            reserves={balances.reserves}
+            availableCash={balances.cash}
+            totalInvested={balances.invested}
           />
 
-          <MetricCard
-            label="A receber"
-            value={metrics.receivable}
-            detail={`Total pendente. ${formatCurrency(metrics.receivableInPeriod)} com previsão no período selecionado.`}
-            icon={Receipt}
-            variant="positive"
-          />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <FlowMetricCard
+              income={metrics.income}
+              expense={metrics.expense}
+            />
 
-          <MetricCard
-            label="A pagar"
-            value={metrics.payable}
-            icon={Clock}
-            variant={metrics.overdue > 0 ? "negative" : "warning"}
-            detail={
-              metrics.overdue > 0
-                ? `${formatCurrency(metrics.overdue)} em atraso`
-                : undefined
-            }
-          />
+            <MetricCard
+              label="A receber"
+              value={metrics.receivable}
+              detail={`Total pendente. ${formatCurrency(metrics.receivableInPeriod)} com previsão no período selecionado.`}
+              icon={Receipt}
+              variant="positive"
+            />
 
-          <CostOfLivingCard />
+            <MetricCard
+              label="A pagar"
+              value={metrics.payable}
+              icon={Clock}
+              variant={metrics.overdue > 0 ? "negative" : "warning"}
+              detail={
+                metrics.overdue > 0
+                  ? `${formatCurrency(metrics.overdue)} em atraso`
+                  : undefined
+              }
+            />
+
+            <CostOfLivingCard />
+          </div>
         </div>
 
         <div className="my-6 h-px bg-[#0D1B2A]/10" />
@@ -902,15 +899,14 @@ export default function DashboardPage() {
         budgetReserve={budgetReserve}
       />
 
-      <details className="overflow-hidden rounded-2xl border border-[#0D1B2A]/10 bg-white shadow-sm">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4">
-          <div>
-            <p className="text-sm font-semibold text-[#0D1B2A]">Análises e planejamento</p>
-            <p className="mt-0.5 text-xs text-[#3A3A3C]/50">Visão anual, orçamento, investimentos e categorias</p>
-          </div>
-          <span className="rounded-full bg-[#F7F5EF] px-3 py-1.5 text-[11px] font-semibold text-[#9A773A]">Ver detalhes</span>
-        </summary>
-        <div className="space-y-6 border-t border-[#0D1B2A]/8 bg-[#F7F5EF]/45 p-4 sm:p-5">
+      <section className="space-y-6">
+        <SpendingCategoryChart
+          categoryData={categoryChartData}
+          periodFilter={periodFilter}
+          customStart={customStart}
+          customEnd={customEnd}
+        />
+
       <section className="rounded-2xl border border-[#0D1B2A]/10 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -1018,22 +1014,8 @@ export default function DashboardPage() {
         }
       />
 
-      <section className="grid grid-cols-1 items-stretch gap-6 xl:grid-cols-5">
-        <div className="xl:col-span-2">
-          <InvestmentOverview />
-        </div>
-
-        <div className="xl:col-span-3">
-          <SpendingCategoryChart
-            categoryData={categoryChartData}
-            periodFilter={periodFilter}
-            customStart={customStart}
-            customEnd={customEnd}
-          />
-        </div>
+      <InvestmentOverview />
       </section>
-        </div>
-      </details>
 
       </div>
 

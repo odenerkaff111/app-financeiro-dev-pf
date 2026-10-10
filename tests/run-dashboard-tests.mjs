@@ -56,4 +56,25 @@ test('Valores invalidos nao sao silenciosamente zerados',()=>assert.throws(()=>s
 test('Dashboard nao filtra mais receitas empresariais',()=>{const s=fs.readFileSync('src/app/page.tsx','utf8');assert.equal(s.includes('filter(t => t.financial_scope !== "business")'),false);assert.equal(s.includes('Disponivel PF confirmado'),false);assert.equal(s.includes('Existem saldos aguardando confirmacao'),false);assert.equal(s.includes('<UpcomingObligations'),false);});
 test('Conciliacao nao e uma aba e obrigacoes continuam em Movimentacoes',()=>{const s=fs.readFileSync('src/app/registros/layout.tsx','utf8');assert.equal(s.includes('/registros/conciliacao'),false);assert.ok(s.includes('/registros/obrigacoes'));});
 test('Controle diario e lembrete, nao trava de navegacao',()=>{assert.ok(fs.readFileSync('src/app/registros/conciliacao/page.tsx','utf8').includes('redirect("/contas")'));const gate=fs.readFileSync('src/components/control/DailyFinanceGate.tsx','utf8');assert.equal(gate.includes('As outras telas continuam bloqueadas'),false);assert.ok(gate.includes('Ele nao bloqueia nenhuma tela do app'));assert.ok(gate.includes('Agora nao'));const sql=fs.readFileSync('supabase/migrations/042_daily_control_non_blocking.sql','utf8');assert.ok(sql.includes("elsif p_answer='registered'"));assert.equal(sql.includes('Nenhum lancamento ou conferencia de saldo foi salvo'),false);assert.ok(sql.includes("v_payload->>'created_by'"));});
+test('Painel mostra saldos bancarios em indicadores dedicados', () => {
+  const page = fs.readFileSync('src/app/page.tsx','utf8');
+  const bank = fs.readFileSync('src/components/dashboard/BankBalanceOverview.tsx','utf8');
+  assert.ok(page.includes('<BankBalanceOverview'));
+  assert.equal(page.includes('Ver por conta'),false);
+  assert.ok(bank.includes('Saldo consolidado em contas'));
+  assert.ok(bank.includes('Conta PJ'));
+  assert.ok(bank.includes('Crédito disponível · cartões próprios'));
+  assert.ok(bank.includes('Caixinhas e investimentos'));
+  assert.ok(bank.includes('Não informado'));
+});
+test('Movimentacoes nao misturam itens de fatura com pagamentos bancarios', () => {
+  const page = fs.readFileSync('src/app/registros/page.tsx','utf8');
+  assert.ok(page.includes('const creditCardDetail'));
+  assert.ok(page.includes('transaction.card_statement_id'));
+  assert.ok(page.includes('transaction.card_forecast'));
+  assert.ok(page.includes('transaction.metadata?.third_party_card'));
+  assert.ok(page.includes('if (creditCardDetail) return false'));
+  assert.ok(page.includes('/registros/obrigacoes'));
+  assert.ok(page.includes('/dividas/cartoes-terceiros'));
+});
 console.log(`\n${count} testes do dashboard aprovados.`);
