@@ -44,13 +44,20 @@ export function transactionDay(t: DashboardTransaction): string {
 export function summarizeBalances(accounts: DashboardAccount[]) {
   const banks = accounts.filter(a => a.is_active && ['checking','savings','cash','wallet'].includes(a.type));
   const cards = accounts.filter(a => a.is_active && a.type === 'credit_card');
+  // Match the existing borrowed-card convention used by the account screen.
+  // A third party's card never increases the user's purchasing capacity.
+  const ownCards = cards.filter(a => !/vanda|emprestad[oa]|terceir[oa]/i.test(a.name));
   const reserves = accounts.filter(a => a.is_active && a.type === 'investment');
+  const cashCents = banks.reduce((s,a) => s + cents(a.balance), 0);
+  const creditCents = ownCards.reduce((s,a) => s + Math.max(cents(a.available_credit), 0), 0);
   return {
-    cash: banks.reduce((s,a) => s + cents(a.balance), 0) / 100,
-    credit: cards.reduce((s,a) => s + cents(a.available_credit), 0) / 100,
+    cash: cashCents / 100,
+    credit: creditCents / 100,
+    // Spending capacity includes credit; cash, investments and period flows stay separate.
+    spendingPower: (cashCents + creditCents) / 100,
     invested: reserves.reduce((s,a) => s + cents(a.balance), 0) / 100,
-    unknownCredit: cards.filter(a => a.available_credit == null).length,
-    banks, cards, reserves,
+    unknownCredit: ownCards.filter(a => a.available_credit == null).length,
+    banks, cards, ownCards, reserves,
   };
 }
 

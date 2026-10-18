@@ -1,5 +1,5 @@
 {
-  "version": "kyra-app-polish-v9-2026-09-29",
+  "version": "kyra-availability-2026-10-17",
   "public_files": [
     ".gitignore",
     "ATUALIZACAO-FINANCEIRO.md",
@@ -40,6 +40,7 @@
     "src/components/control/FinanceControl.tsx",
     "src/components/control/ReminderSettings.tsx",
     "src/components/dashboard/UpcomingObligations.tsx",
+    "src/components/dashboard/BankBalanceOverview.tsx",
     "src/components/finance/InstallmentPurchasesPanel.tsx",
     "src/components/finance/UnifiedFinancialEntryModal.tsx",
     "src/components/pwa/PwaServiceWorkerRegistrar.tsx",
@@ -56,6 +57,7 @@
     "tests/041_testar_controle_sem_gravar.sql",
     "tests/run-control-tests.mjs",
     "tests/run-dashboard-tests.mjs",
+    "tests/run-availability-tests.mjs",
     "tests/run-push-tests.mjs",
     "tools/finance-update-files.json",
     "tools/preparar-web-push.mjs",

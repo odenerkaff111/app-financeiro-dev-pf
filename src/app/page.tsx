@@ -844,11 +844,7 @@ export default function DashboardPage() {
         <div className={privateDataClass}>
         <div className="mt-4 space-y-4">
           <BankBalanceOverview
-            banks={balances.banks}
-            cards={balances.cards}
-            reserves={balances.reserves}
-            availableCash={balances.cash}
-            totalInvested={balances.invested}
+            balances={balances}
           />
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
