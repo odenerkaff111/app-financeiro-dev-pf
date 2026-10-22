@@ -1,0 +1,21 @@
+{
+  "version": "faturas-2026-10-22",
+  "files": [
+    "src/app/page.tsx",
+    "src/components/dashboard/BankBalanceOverview.tsx",
+    "src/components/dashboard/UpcomingObligations.tsx",
+    "src/components/control/FinanceControl.tsx",
+    "src/components/finance/CardBillsPanel.tsx",
+    "src/components/finance/UnifiedFinancialEntryModal.tsx",
+    "src/lib/dashboard/summary.ts",
+    "src/lib/card-statements.ts",
+    "supabase/migrations/038_financial_control.sql",
+    "supabase/migrations/044_card_statements_dashboard.sql",
+    "supabase/tests/044_card_statements_smoke.sql",
+    "tests/run-card-statements-tests.mjs",
+    "tools/publicar-faturas.ps1",
+    "tools/faturas-update-files.json",
+    "tools/finance-update-files.json",
+    "docs/FATURAS.md"
+  ]
+}

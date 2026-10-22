@@ -6,6 +6,7 @@ export type Money = number | string | null | undefined;
 export type DashboardAccount = {
   id: string; name: string; type: string; balance: Money; is_active: boolean;
   available_credit?: Money; account_scope?: string; reconciliation_required?: boolean;
+  card_owner_type?: 'own' | 'third_party'; card_holder_name?: string | null;
 };
 export type DashboardTransaction = {
   id: string; type: string; status: string; amount: Money;
@@ -41,20 +42,21 @@ export function transactionDay(t: DashboardTransaction): string {
   }).format(time);
 }
 
+export function isThirdPartyCard(account: { name: string; card_owner_type?: string | null }) {
+  return account.card_owner_type ? account.card_owner_type === 'third_party' : /vanda|emprestad[oa]|terceir[oa]/i.test(account.name);
+}
+
 export function summarizeBalances(accounts: DashboardAccount[]) {
   const banks = accounts.filter(a => a.is_active && ['checking','savings','cash','wallet'].includes(a.type));
   const cards = accounts.filter(a => a.is_active && a.type === 'credit_card');
-  // Match the existing borrowed-card convention used by the account screen.
-  // A third party's card never increases the user's purchasing capacity.
-  const ownCards = cards.filter(a => !/vanda|emprestad[oa]|terceir[oa]/i.test(a.name));
+  const ownCards = cards.filter(a => !isThirdPartyCard(a));
   const reserves = accounts.filter(a => a.is_active && a.type === 'investment');
-  const cashCents = banks.reduce((s,a) => s + cents(a.balance), 0);
-  const creditCents = ownCards.reduce((s,a) => s + Math.max(cents(a.available_credit), 0), 0);
+  const cash = banks.reduce((s,a) => s + cents(a.balance), 0);
+  const credit = ownCards.reduce((s,a) => s + Math.max(cents(a.available_credit), 0), 0);
   return {
-    cash: cashCents / 100,
-    credit: creditCents / 100,
-    // Spending capacity includes credit; cash, investments and period flows stay separate.
-    spendingPower: (cashCents + creditCents) / 100,
+    cash: cash / 100,
+    credit: credit / 100,
+    spendingPower: (cash + credit) / 100,
     invested: reserves.reduce((s,a) => s + cents(a.balance), 0) / 100,
     unknownCredit: ownCards.filter(a => a.available_credit == null).length,
     banks, cards, ownCards, reserves,

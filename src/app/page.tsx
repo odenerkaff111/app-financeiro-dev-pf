@@ -42,6 +42,7 @@ import { summarizeBalances, summarizePeriod, transactionDay, uncommittedBudget, 
 import { useHousehold } from "@/contexts/HouseholdContext";
 import { SpendingCategoryChart } from "@/components/dashboard/SpendingCategoryChart";
 import { BankBalanceOverview } from "@/components/dashboard/BankBalanceOverview";
+import { CardBillsPanel } from "@/components/finance/CardBillsPanel";
 import { DebtSummarySection } from "@/components/DebtSummarySection";
 import { MonthlyClosingSection } from "@/components/MonthlyClosingSection";
 
@@ -95,6 +96,7 @@ type Account = {
   is_active: boolean;
   account_scope: "personal" | "business";
   reconciliation_required: boolean;
+  card_owner_type?: 'own' | 'third_party';
 };
 
 type Category = {
@@ -367,7 +369,7 @@ export default function DashboardPage() {
         supabase
           .from("pf_accounts")
           .select(
-            "id, household_id, name, institution_name, type, balance, available_credit, is_active, account_scope, reconciliation_required",
+            "id, household_id, name, institution_name, type, balance, available_credit, is_active, account_scope, reconciliation_required, card_owner_type",
           )
           .eq(
             "household_id",
@@ -843,9 +845,8 @@ export default function DashboardPage() {
 
         <div className={privateDataClass}>
         <div className="mt-4 space-y-4">
-          <BankBalanceOverview
-            balances={balances}
-          />
+          <BankBalanceOverview balances={balances} />
+          <CardBillsPanel />
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <FlowMetricCard

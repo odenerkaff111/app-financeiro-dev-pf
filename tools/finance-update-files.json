@@ -1,5 +1,5 @@
 {
-  "version": "kyra-availability-2026-10-17",
+  "version": "faturas-2026-10-22",
   "public_files": [
     ".gitignore",
     "ATUALIZACAO-FINANCEIRO.md",
@@ -40,7 +40,6 @@
     "src/components/control/FinanceControl.tsx",
     "src/components/control/ReminderSettings.tsx",
     "src/components/dashboard/UpcomingObligations.tsx",
-    "src/components/dashboard/BankBalanceOverview.tsx",
     "src/components/finance/InstallmentPurchasesPanel.tsx",
     "src/components/finance/UnifiedFinancialEntryModal.tsx",
     "src/components/pwa/PwaServiceWorkerRegistrar.tsx",
@@ -57,7 +56,6 @@
     "tests/041_testar_controle_sem_gravar.sql",
     "tests/run-control-tests.mjs",
     "tests/run-dashboard-tests.mjs",
-    "tests/run-availability-tests.mjs",
     "tests/run-push-tests.mjs",
     "tools/finance-update-files.json",
     "tools/preparar-web-push.mjs",
@@ -80,6 +78,15 @@
     "supabase/migrations/041_web_push_dispatch_fixes.sql",
     "src/app/api/ai/usage/route.ts",
     "tests/run-api-security-tests.mjs",
-    "src/components/DebtSummarySection.tsx"
+    "src/components/DebtSummarySection.tsx",
+    "src/components/dashboard/BankBalanceOverview.tsx",
+    "src/components/finance/CardBillsPanel.tsx",
+    "src/lib/card-statements.ts",
+    "supabase/migrations/044_card_statements_dashboard.sql",
+    "supabase/tests/044_card_statements_smoke.sql",
+    "tests/run-card-statements-tests.mjs",
+    "tools/publicar-faturas.ps1",
+    "tools/faturas-update-files.json",
+    "docs/FATURAS.md"
   ]
 }

@@ -161,7 +161,9 @@ export function UpcomingObligations() {
 
   useEffect(() => {
     const task=setTimeout(()=>void loadData(),0);
-    return()=>clearTimeout(task);
+    const reload=()=>{void loadData();};
+    window.addEventListener('pf:financial-data-changed',reload);
+    return()=>{clearTimeout(task);window.removeEventListener('pf:financial-data-changed',reload);};
   }, [loadData]);
 
   useEffect(() => {

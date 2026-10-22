@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { LoansPanel } from "@/components/control/FinanceControl";
 import { rpc as controlRpc } from "@/lib/control/client";
+import { isThirdPartyCard } from "@/lib/dashboard/summary";
 import { createPortal } from "react-dom";
 import {
   useCallback,
@@ -59,6 +60,7 @@ type Account = {
   institution_name: string | null;
   type: string;
   balance: number | string;
+  card_owner_type?: 'own' | 'third_party';
 };
 
 type Category = {
@@ -287,7 +289,7 @@ export function UnifiedFinancialEntryModal({
       await Promise.all([
         supabase
           .from("pf_accounts")
-          .select("id, name, institution_name, type, balance")
+          .select("id, name, institution_name, type, balance, card_owner_type")
           .eq("household_id", household.id)
           .eq("is_active", true)
           .order("name"),
@@ -483,7 +485,7 @@ export function UnifiedFinancialEntryModal({
   }, [accounts, form.kind]);
 
   const creditCardAccounts = useMemo(
-    () => accounts.filter((account) => account.type === "credit_card"),
+    () => accounts.filter((account) => account.type === "credit_card" && !isThirdPartyCard(account)),
     [accounts],
   );
 
@@ -708,28 +710,18 @@ export function UnifiedFinancialEntryModal({
     }
     if (form.isRecurring) throw new Error("Assinatura recorrente: selecione um cartao proprio e 1 parcela.");
 
-    const result = await supabase.rpc("pf_create_installment_purchase_v1", {
-      target_household_id: household.id,
-      purchase_description: form.description.trim(),
-      purchase_merchant: form.counterparty.trim() || null,
-      purchase_total_amount: amount,
-      purchase_installments: installments,
-      first_installment_due_date: form.installmentFirstDueDate,
-      purchase_category_id: form.categoryId,
-      credit_card_account_id: null,
-      third_party_card_holder:
-        form.installmentCardMode === "third_party"
-          ? form.installmentCardHolder.trim()
-          : null,
-      third_party_card_institution:
-        form.installmentCardMode === "third_party"
-          ? form.installmentCardInstitution.trim() || null
-          : null,
-      purchase_notes: form.notes.trim() || null,
-      purchase_is_essential: form.isEssential,
+    await controlRpc("pf_create_third_party_purchase_v2", {
+      p_household: household.id,
+      p_holder: form.installmentCardHolder.trim(),
+      p_institution: form.installmentCardInstitution.trim() || null,
+      p_description: form.description.trim(),
+      p_merchant: form.counterparty.trim() || null,
+      p_amount: amount, p_count: installments,
+      p_first_due: form.installmentFirstDueDate,
+      p_category: form.categoryId, p_purchased_on: form.date,
+      p_notes: form.notes.trim() || null,
+      p_essential: form.isEssential, p_request: crypto.randomUUID(),
     });
-
-    if (result.error) throw result.error;
   }
 
   async function saveDirectTransaction(userId: string) {

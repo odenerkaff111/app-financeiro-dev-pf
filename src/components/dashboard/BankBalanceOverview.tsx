@@ -39,10 +39,11 @@ function moneySum(accounts: DashboardAccount[]) {
 }
 
 export function BankBalanceOverview({ balances }: Props) {
-  const { banks, ownCards, reserves, cash, credit, spendingPower, invested, unknownCredit } = balances;
+  const { banks, ownCards, reserves, cash: availableCash, invested: totalInvested, credit, spendingPower, unknownCredit: unknownLimitCount } = balances;
   const personal = moneySum(banks.filter((account) => account.account_scope !== "business"));
   const business = moneySum(banks.filter((account) => account.account_scope === "business"));
-  const cardsLabel = ownCards.length > 0 && unknownCredit === ownCards.length ? "Não informado" : displayMoney(credit);
+  const cardsWithLimit = ownCards.filter((account) => account.available_credit != null);
+  const cardsLabel = ownCards.length > 0 && cardsWithLimit.length === 0 ? "Não informado" : displayMoney(credit);
 
   const orderedBanks = [...banks].sort((a, b) => {
     const accountScope = Number(a.account_scope === "business") - Number(b.account_scope === "business");
@@ -51,7 +52,7 @@ export function BankBalanceOverview({ balances }: Props) {
   });
 
   return (
-    <section aria-label="Disponibilidade para compras e saldos por conta" className="space-y-3">
+    <section aria-label="Saldos por conta" className="space-y-3">
       <div className="grid gap-3 xl:grid-cols-[minmax(255px,0.82fr)_minmax(0,2fr)]">
         <div className="relative flex min-h-[198px] flex-col justify-between overflow-hidden rounded-[22px] bg-[#0D1B2A] p-5 text-white shadow-[0_12px_32px_rgba(13,27,42,0.14)] sm:p-6">
           <div aria-hidden="true" className="pointer-events-none absolute -right-16 -top-20 h-52 w-52 rounded-full border-[36px] border-white/[0.045]" />
@@ -62,11 +63,11 @@ export function BankBalanceOverview({ balances }: Props) {
           <div className="relative my-4">
             <p className="break-words text-[clamp(1.65rem,3vw,2.2rem)] font-semibold tracking-[-0.055em] tabular-nums leading-tight">{displayMoney(spendingPower)}</p>
             <p className="mt-2 text-[11px] text-white/60">Saldo em contas + crédito próprio · reservas separadas</p>
-            <p className="mt-1 text-[10px] text-white/55">Usar crédito gera uma fatura a pagar.</p>
-            {unknownCredit > 0 && <p className="mt-2 text-[10px] text-amber-200">Total parcial: {unknownCredit} {unknownCredit === 1 ? "cartão sem limite informado" : "cartões sem limite informado"}.</p>}
+            <p className="mt-1 text-[10px] text-white/60">Usar crédito gera uma fatura a pagar.</p>
+            {unknownLimitCount > 0 && <p className="mt-1 text-[10px] text-amber-200">Total parcial: há limite não informado.</p>}
           </div>
           <div className="relative flex flex-wrap gap-x-4 gap-y-1 border-t border-white/15 pt-3 text-[11px] text-white/75">
-            <span>Em contas <strong className="ml-1 font-semibold text-white tabular-nums">{displayMoney(cash)}</strong></span>
+            <span>Em contas <strong className="ml-1 font-semibold text-white tabular-nums">{displayMoney(availableCash)}</strong></span>
             <span>Crédito <strong className="ml-1 font-semibold text-white tabular-nums">{cardsLabel}</strong></span>
           </div>
         </div>
@@ -93,21 +94,17 @@ export function BankBalanceOverview({ balances }: Props) {
         </div>
       </div>
 
-      <div className="grid gap-2.5 md:grid-cols-3">
+      <div className="grid gap-2.5 sm:grid-cols-3">
         <div className="flex min-w-0 items-center gap-3 rounded-2xl border border-[#0D1B2A]/[0.085] bg-white px-4 py-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F1F3F5] text-[#0D1B2A]"><Landmark size={19} aria-hidden="true" /></div>
-          <div className="min-w-0 flex-1">
-            <p className="text-[11px] text-[#3A3A3C]/60">Saldo consolidado em contas</p>
-            <p className="text-[17px] font-semibold tabular-nums tracking-tight text-[#0D1B2A]">{displayMoney(cash)}</p>
-            <p className="text-[10px] text-[#3A3A3C]/55">PF {displayMoney(personal)} · PJ {displayMoney(business)}</p>
-          </div>
+          <Landmark size={20} className="shrink-0 text-[#345D99]"/>
+          <div><p className="text-[11px] text-[#3A3A3C]/60">Saldo consolidado em contas</p><p className="text-[17px] font-semibold tabular-nums">{displayMoney(availableCash)}</p><p className="text-[10px] text-[#3A3A3C]/55">PF {displayMoney(personal)} · PJ {displayMoney(business)}</p></div>
         </div>
         <div className="flex min-w-0 items-center gap-3 rounded-2xl border border-[#0D1B2A]/[0.085] bg-white px-4 py-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#EAF1FA] text-[#345D99]"><CreditCard size={19} aria-hidden="true" /></div>
           <div className="min-w-0 flex-1">
             <p className="text-[11px] text-[#3A3A3C]/60">Crédito disponível · cartões próprios</p>
             <p className="text-[17px] font-semibold tabular-nums tracking-tight text-[#0D1B2A]">{cardsLabel}</p>
-            {unknownCredit > 0 && <p className="text-[10px] text-[#3A3A3C]/55">{unknownCredit} {unknownCredit === 1 ? "cartão sem limite informado" : "cartões sem limite informado"}</p>}
+            {unknownLimitCount > 0 && <p className="text-[10px] text-[#3A3A3C]/55">{unknownLimitCount} {unknownLimitCount === 1 ? "cartão sem limite informado" : "cartões sem limite informado"}</p>}
           </div>
           <ArrowUpRight className="text-[#0D1B2A]/25" size={17} aria-hidden="true" />
         </div>
@@ -115,8 +112,8 @@ export function BankBalanceOverview({ balances }: Props) {
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#ECF6EB] text-[#447A52]"><PiggyBank size={19} aria-hidden="true" /></div>
           <div className="min-w-0 flex-1">
             <p className="text-[11px] text-[#3A3A3C]/60">Caixinhas e investimentos</p>
-            <p className="text-[17px] font-semibold tabular-nums tracking-tight text-[#0D1B2A]">{displayMoney(invested)}</p>
-            <p className="text-[10px] text-[#3A3A3C]/55">{reserves.length} {reserves.length === 1 ? "reserva ativa" : "reservas ativas"} · fora do disponível para compras</p>
+            <p className="text-[17px] font-semibold tabular-nums tracking-tight text-[#0D1B2A]">{displayMoney(totalInvested)}</p>
+            <p className="text-[10px] text-[#3A3A3C]/55">{reserves.length} {reserves.length === 1 ? "reserva ativa" : "reservas ativas"} · fora do saldo em contas</p>
           </div>
           <Banknote className="text-[#0D1B2A]/25" size={17} aria-hidden="true" />
         </div>

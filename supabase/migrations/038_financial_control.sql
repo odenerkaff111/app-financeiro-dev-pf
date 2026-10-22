@@ -485,7 +485,7 @@ begin
  return d;
 end $$;
 
-create or replace function public.pf_generate_recurring_transactions(target_month date) returns integer
+create or replace function public.pf_generate_recurring_transactions(target_month date default current_date) returns integer
 language plpgsql security definer set search_path=public,pg_temp as $$
 declare r public.pf_recurring_templates%rowtype; charge date; due date; n integer:=0; m date:=date_trunc('month',target_month)::date;
 begin
