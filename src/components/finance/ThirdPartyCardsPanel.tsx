@@ -121,7 +121,8 @@ export function ThirdPartyCardsPanel() {
   }, [household.id]);
 
   useEffect(() => {
-    void loadData();
+    const task = window.setTimeout(() => void loadData(), 0);
+    return () => window.clearTimeout(task);
   }, [loadData]);
 
   const groups = useMemo<HolderGroup[]>(() => {
@@ -165,28 +166,17 @@ export function ThirdPartyCardsPanel() {
 
   return (
     <div className="space-y-5">
-      <section className="flex flex-col gap-4 rounded-2xl border border-[#0D1B2A]/10 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#C8A15A]">
-            Cartões de terceiros
-          </p>
-          <h1 className="mt-1 text-2xl font-semibold text-[#0D1B2A]">
-            Faturas que você vai reembolsar
-          </h1>
-          <p className="mt-1 max-w-2xl text-sm leading-6 text-[#3A3A3C]/60">
-            Compras feitas em cartão de outra pessoa ficam agrupadas por titular. A próxima fatura e todas as parcelas futuras são somadas automaticamente.
-          </p>
-        </div>
+      <div className="flex justify-end">
         <button
           type="button"
           onClick={() => setEntryOpen(true)}
           disabled={!canWrite}
-          className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#0D1B2A] px-4 text-sm font-semibold text-white disabled:opacity-50"
+          className="app-primary-button px-4 disabled:opacity-50"
         >
           <Plus size={17} />
           Registrar compra
         </button>
-      </section>
+      </div>
 
       {error && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

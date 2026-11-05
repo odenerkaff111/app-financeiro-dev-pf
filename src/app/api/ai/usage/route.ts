@@ -115,6 +115,31 @@ export async function GET(
         accessToken,
       );
 
+    const { data: userData, error: userError } =
+      await supabase.auth.getUser();
+
+    if (userError || !userData.user) {
+      return NextResponse.json(
+        { error: "Sua sessão expirou." },
+        { status: 401 },
+      );
+    }
+
+    const { data: membership, error: membershipError } =
+      await supabase
+        .from("pf_household_members")
+        .select("role")
+        .eq("household_id", householdId)
+        .eq("user_id", userData.user.id)
+        .maybeSingle();
+
+    if (membershipError || !membership) {
+      return NextResponse.json(
+        { error: "Sem acesso a este grupo." },
+        { status: 403 },
+      );
+    }
+
     const now =
       new Date();
 

@@ -3,29 +3,35 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "next dev --webpack",
+    "build": "next build --webpack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:control": "node tests/run-control-tests.mjs",
+    "typecheck": "tsc --noEmit",
+    "test:security": "node tests/run-api-security-tests.mjs",
+    "test:ai-batch": "node tests/run-ai-batch-tests.mjs",
+    "test:family": "node tests/run-family-finance-tests.mjs && node tests/run-family-plan-tests.mjs",
+    "test:family-sql": "node tests/run-family-sql-tests.mjs",
+    "test:chat": "node tests/run-chat-tests.mjs && node tests/run-chat-model-tests.mjs && node tests/run-chat-sql-tests.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.99.2",
     "date-fns": "^4.1.0",
     "lucide-react": "^0.577.0",
-    "next": "16.2.0",
-    "nodemailer": "^8.0.3",
+    "next": "16.4.3",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "recharts": "^3.8.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.11",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
-    "@types/nodemailer": "^7.0.11",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.2.0",
+    "eslint-config-next": "16.4.3",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

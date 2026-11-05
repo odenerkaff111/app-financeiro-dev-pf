@@ -6,7 +6,8 @@ export type FinancialActionType =
   | "register_debt_received"
   | "create_commitment"
   | "register_commitment_settlement"
-  | "create_other_debt";
+  | "create_other_debt"
+  | "batch_update";
 
 export type FinancialActionStatus =
   | "none"
@@ -16,6 +17,8 @@ export type FinancialActionStatus =
   | "failed";
 
 export type FinancialActionPayload = {
+  batch_id?: string | null;
+  batch_items?: import("@/lib/ai-finance-batch").BatchPreviewItem[];
   account_id: string | null;
   account_name: string | null;
   destination_account_id: string | null;
@@ -159,6 +162,8 @@ export function actionTitle(
 ) {
   const direction = payload.commitment_direction;
 
+  if (actionType === "batch_update") return "Atualização financeira em lote";
+
   if (actionType === "create_commitment") {
     return direction === "receivable"
       ? "Registrar valor a receber"
@@ -200,6 +205,7 @@ export function getActionProposalText(
   actionType: FinancialActionType,
   payload: FinancialActionPayload,
 ) {
+  if (actionType === "batch_update") return "Revise cada item e confirme a atualização. Nada foi gravado ainda.";
   const amount = payload.amount !== null
     ? formatCurrency(payload.amount)
     : null;

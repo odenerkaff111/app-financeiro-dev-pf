@@ -12,10 +12,10 @@ import {
   ArrowUpCircle,
   CheckCircle2,
   Clock,
+  SlidersHorizontal,
   Eye,
   EyeOff,
   Loader2,
-  PiggyBank,
   Receipt,
   Wallet,
 } from "lucide-react";
@@ -37,14 +37,18 @@ import {
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { supabase } from "@/lib/supabase";
+import { rowResult } from "@/lib/control/client";
+import { summarizeBalances, summarizePeriod, transactionDay, uncommittedBudget, type DashboardLoan, type DashboardStatement } from "@/lib/dashboard/summary";
 import { useHousehold } from "@/contexts/HouseholdContext";
 import { SpendingCategoryChart } from "@/components/dashboard/SpendingCategoryChart";
+import { BankBalanceOverview } from "@/components/dashboard/BankBalanceOverview";
 import { DebtSummarySection } from "@/components/DebtSummarySection";
 import { MonthlyClosingSection } from "@/components/MonthlyClosingSection";
-import { UpcomingObligations } from "@/components/dashboard/UpcomingObligations";
+
 import { InvestmentOverview } from "@/components/dashboard/InvestmentOverview";
 import { CostOfLivingCard } from "@/components/dashboard/CostOfLivingCard";
 import { BudgetPlanningSummary } from "@/components/dashboard/BudgetPlanningSummary";
+import { BottomSheet } from "@/components/ui/BottomSheet";
 
 type PeriodFilter =
   | "today"
@@ -70,7 +74,9 @@ type TransactionType =
   | "debt_payment"
   | "investment_contribution"
   | "investment_withdrawal"
-  | "adjustment";
+  | "adjustment"
+  | "loan_given"
+  | "loan_repayment";
 
 type TransactionStatus =
   | "planned"
@@ -85,7 +91,10 @@ type Account = {
   institution_name: string | null;
   type: AccountType;
   balance: number | string;
+  available_credit: number | string | null;
   is_active: boolean;
+  account_scope: "personal" | "business";
+  reconciliation_required: boolean;
 };
 
 type Category = {
@@ -102,6 +111,7 @@ type Transaction = {
   destination_account_id: string | null;
   category_id: string | null;
   budget_id: string | null;
+  financial_scope: "personal" | "business";
   type: TransactionType;
   status: TransactionStatus;
   description: string;
@@ -110,6 +120,10 @@ type Transaction = {
   occurred_on: string;
   due_date: string | null;
   paid_at: string | null;
+  card_statement_id: string | null;
+  card_forecast: boolean;
+  recurrence_key: string | null;
+  metadata: Record<string, unknown>;
 };
 
 type Budget = {
@@ -261,6 +275,9 @@ export default function DashboardPage() {
   const [budgets, setBudgets] =
     useState<Budget[]>([]);
 
+  const [loans, setLoans] = useState<DashboardLoan[]>([]);
+  const [statements, setStatements] = useState<DashboardStatement[]>([]);
+
   const [periodFilter, setPeriodFilter] =
     useState<PeriodFilter>("month");
   const [customStart, setCustomStart] = useState(getToday());
@@ -280,7 +297,8 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const storageKey = `pf:dashboard-values-hidden:${household.id}`;
-    setDashboardValuesHidden(window.localStorage.getItem(storageKey) === "true");
+    const task=setTimeout(()=>{try{setDashboardValuesHidden(window.localStorage.getItem(storageKey) === "true");}catch{/* Privacy toggle remains available. */}},0);
+    return()=>clearTimeout(task);
   }, [household.id]);
 
   function toggleDashboardPrivacy() {
@@ -343,11 +361,13 @@ export default function DashboardPage() {
         categoriesResult,
         transactionsResult,
         budgetsResult,
+        loansResult,
+        statementsResult,
       ] = await Promise.all([
         supabase
           .from("pf_accounts")
           .select(
-            "id, household_id, name, institution_name, type, balance, is_active",
+            "id, household_id, name, institution_name, type, balance, available_credit, is_active, account_scope, reconciliation_required",
           )
           .eq(
             "household_id",
@@ -365,26 +385,17 @@ export default function DashboardPage() {
             household.id,
           ),
 
-        supabase
-          .from("pf_transactions")
-          .select(
-            "id, household_id, account_id, destination_account_id, category_id, budget_id, type, status, description, merchant, amount, occurred_on, due_date, paid_at",
-          )
-          .eq(
-            "household_id",
-            household.id,
-          )
-          .order("occurred_on", {
-            ascending: false,
-          })
-          .order("created_at", {
-            ascending: false,
-          }),
+        rowResult<Transaction>("pf_transactions", household.id,
+          "id, household_id, account_id, destination_account_id, category_id, budget_id, type, status, description, merchant, amount, occurred_on, due_date, paid_at, financial_scope, card_statement_id, card_forecast, recurrence_key, metadata"),
 
         supabase
           .from("pf_budgets")
           .select("id, category_id, month, amount")
           .eq("household_id", household.id),
+        rowResult<DashboardLoan>("pf_personal_loan_positions", household.id,
+          "id, borrower, remaining_amount, due_date, cancelled_at"),
+        rowResult<DashboardStatement>("pf_card_statement_positions", household.id,
+          "id, due_date, remaining_amount"),
       ]);
 
       if (accountsResult.error) {
@@ -443,6 +454,13 @@ export default function DashboardPage() {
         return;
       }
 
+      if (loansResult.error || statementsResult.error) {
+        setError(loansResult.error?.message || statementsResult.error?.message || "Não foi possível carregar os valores pendentes.");
+        setLoading(false);
+        return;
+      }
+      setLoans(loansResult.data ?? []);
+      setStatements(statementsResult.data ?? []);
       setAccounts(
         (accountsResult.data ??
           []) as Account[],
@@ -454,8 +472,7 @@ export default function DashboardPage() {
       );
 
       setTransactions(
-        (transactionsResult.data ??
-          []) as Transaction[],
+        (transactionsResult.data ?? []) as Transaction[],
       );
 
       setBudgets(
@@ -468,7 +485,18 @@ export default function DashboardPage() {
   );
 
   useEffect(() => {
-    void loadDashboard();
+    const task=setTimeout(()=>void loadDashboard(),0);
+    const refresh = () => { void loadDashboard(); };
+    const onStorage = (event: StorageEvent) => { if (event.key === "pf:financial-data-version") refresh(); };
+    window.addEventListener("pf:financial-data-changed", refresh);
+    window.addEventListener("focus", refresh);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      clearTimeout(task);
+      window.removeEventListener("pf:financial-data-changed", refresh);
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("storage", onStorage);
+    };
   }, [loadDashboard]);
 
   const categoryMap = useMemo(() => {
@@ -493,11 +521,7 @@ export default function DashboardPage() {
           const effectiveStatus =
             getEffectiveStatus(transaction);
 
-          const referenceDate =
-            effectiveStatus === "planned" ||
-            effectiveStatus === "overdue"
-              ? transaction.due_date ?? transaction.occurred_on
-              : transaction.paid_at?.slice(0, 10) ?? transaction.occurred_on;
+          const referenceDate = transactionDay(transaction);
 
           const date = parseISO(referenceDate);
 
@@ -543,196 +567,31 @@ export default function DashboardPage() {
     customEnd,
   ]);
 
-  const metrics = useMemo(() => {
-    const activeAccounts =
-      accounts.filter(
-        (account) => account.is_active,
-      );
-
-    const available =
-      activeAccounts
-        .filter((account) =>
-          [
-            "checking",
-            "savings",
-            "cash",
-            "wallet",
-          ].includes(account.type),
-        )
-        .reduce(
-          (total, account) =>
-            total +
-            Number(account.balance || 0),
-          0,
-        );
-
-    const invested =
-      activeAccounts
-        .filter(
-          (account) =>
-            account.type ===
-            "investment",
-        )
-        .reduce(
-          (total, account) =>
-            total +
-            Number(account.balance || 0),
-          0,
-        );
-
-    let income = 0;
-    let expense = 0;
-    let receivable = 0;
-    let payable = 0;
-    let overdue = 0;
-
-    periodTransactions.forEach(
-      (transaction) => {
-        const amount =
-          Number(transaction.amount) || 0;
-
-        const effectiveStatus =
-          getEffectiveStatus(
-            transaction,
-          );
-
-        if (
-          transaction.status === "paid"
-        ) {
-          if (transaction.type === "income") {
-            income += amount;
-          }
-
-          if (
-            transaction.type ===
-              "expense" ||
-            transaction.type ===
-              "debt_payment"
-          ) {
-            expense += amount;
-          }
-        }
-
-        if (
-          effectiveStatus ===
-            "planned" ||
-          effectiveStatus ===
-            "overdue"
-        ) {
-          if (
-            transaction.type === "income"
-          ) {
-            receivable += amount;
-          }
-
-          if (
-            transaction.type ===
-              "expense" ||
-            transaction.type ===
-              "debt_payment"
-          ) {
-            payable += amount;
-          }
-        }
-
-        if (
-          effectiveStatus === "overdue" &&
-          (transaction.type === "expense" ||
-            transaction.type === "debt_payment")
-        ) {
-          overdue += amount;
-        }
-      },
-    );
-
-    return {
-      available,
-      invested,
-      income,
-      expense,
-      receivable,
-      payable,
-      overdue,
-    };
-  }, [
-    accounts,
-    periodTransactions,
-  ]);
-
-  const budgetReserve = useMemo(() => {
-    const relevantMonths = relevantBudgetMonths(
-      periodFilter,
-      customStart,
-      customEnd,
-    );
-
-    if (relevantMonths.size === 0 || budgets.length === 0) {
-      return 0;
+  const balances = useMemo(() => summarizeBalances(accounts), [accounts]);
+  const selectedRange = useMemo(() => {
+    const today = getToday();
+    if (periodFilter === "all") return { start: null, end: null };
+    if (periodFilter === "custom") return { start: customStart || "9999-12-31", end: customEnd || "0001-01-01" };
+    if (periodFilter === "today") return { start: today, end: today };
+    if (periodFilter === "week") {
+      const start = new Date(`${today}T12:00:00`);
+      start.setDate(start.getDate() - start.getDay());
+      const end = new Date(start); end.setDate(end.getDate() + 6);
+      return { start: format(start, "yyyy-MM-dd"), end: format(end, "yyyy-MM-dd") };
     }
+    const month = getMonthKey(periodFilter === "next_month" ? 1 : 0);
+    const end = new Date(`${month}-01T12:00:00`);
+    end.setMonth(end.getMonth() + 1, 0);
+    return { start: `${month}-01`, end: format(end, "yyyy-MM-dd") };
+  }, [periodFilter, customStart, customEnd]);
 
-    const budgetsByCategoryMonth = new Map<string, Budget[]>();
-    budgets.forEach((budget) => {
-      const key = `${budget.category_id}:${budget.month}`;
-      const current = budgetsByCategoryMonth.get(key) ?? [];
-      current.push(budget);
-      budgetsByCategoryMonth.set(key, current);
-    });
+  const metrics = useMemo(() => summarizePeriod(
+    transactions, statements, loans, selectedRange, getToday(),
+  ), [transactions, statements, loans, selectedRange]);
 
-    const committedByBudget = new Map<string, number>();
-
-    transactions.forEach((transaction) => {
-      if (
-        transaction.type !== "expense" ||
-        transaction.status === "cancelled" ||
-        !transaction.category_id
-      ) {
-        return;
-      }
-
-      const effectiveStatus = getEffectiveStatus(transaction);
-      const referenceDate =
-        effectiveStatus === "planned" || effectiveStatus === "overdue"
-          ? transaction.due_date ?? transaction.occurred_on
-          : transaction.paid_at?.slice(0, 10) ?? transaction.occurred_on;
-      const month = monthStartKey(referenceDate);
-
-      if (!relevantMonths.has(month)) {
-        return;
-      }
-
-      let budgetId = transaction.budget_id;
-      if (!budgetId) {
-        const categoryBudgets =
-          budgetsByCategoryMonth.get(`${transaction.category_id}:${month}`) ?? [];
-        if (categoryBudgets.length === 1) {
-          budgetId = categoryBudgets[0].id;
-        }
-      }
-
-      if (!budgetId) return;
-
-      committedByBudget.set(
-        budgetId,
-        (committedByBudget.get(budgetId) ?? 0) + Number(transaction.amount || 0),
-      );
-    });
-
-    return budgets.reduce((total, budget) => {
-      if (!relevantMonths.has(budget.month)) {
-        return total;
-      }
-
-      const committed = committedByBudget.get(budget.id) ?? 0;
-      const remaining = Math.max(Number(budget.amount || 0) - committed, 0);
-      return total + remaining;
-    }, 0);
-  }, [
-    budgets,
-    transactions,
-    periodFilter,
-    customStart,
-    customEnd,
-  ]);
+  const budgetReserve = useMemo(() => uncommittedBudget(
+    budgets, transactions, relevantBudgetMonths(periodFilter, customStart, customEnd),
+  ), [budgets, transactions, periodFilter, customStart, customEnd]);
 
   const annualYears = useMemo(() => {
     const currentYear = new Date().getFullYear();
@@ -753,54 +612,13 @@ export default function DashboardPage() {
     return Array.from(years).sort((a, b) => b - a);
   }, [transactions]);
 
-  const monthlyChartData = useMemo(() => {
-    const data = MONTH_NAMES.map((name) => ({
-      name,
-      Entradas: 0,
-      Saídas: 0,
-    }));
-
-    transactions.forEach((transaction) => {
-      if (transaction.status === "cancelled") {
-        return;
-      }
-
-      const effectiveStatus = getEffectiveStatus(transaction);
-      const referenceDate =
-        effectiveStatus === "planned" || effectiveStatus === "overdue"
-          ? transaction.due_date ?? transaction.occurred_on
-          : transaction.paid_at?.slice(0, 10) ?? transaction.occurred_on;
-
-      try {
-        const date = parseISO(referenceDate);
-
-        if (date.getFullYear() !== annualYear) {
-          return;
-        }
-
-        const amount = Number(transaction.amount) || 0;
-        const item = data[date.getMonth()];
-
-        if (
-          transaction.type === "income" ||
-          transaction.type === "debt_received"
-        ) {
-          item.Entradas += amount;
-        }
-
-        if (
-          transaction.type === "expense" ||
-          transaction.type === "debt_payment"
-        ) {
-          item.Saídas += amount;
-        }
-      } catch {
-        return;
-      }
-    });
-
-    return data;
-  }, [transactions, annualYear]);
+  const monthlyChartData = useMemo(() => MONTH_NAMES.map((name, index) => {
+    const month = `${annualYear}-${String(index + 1).padStart(2, "0")}`;
+    const end = new Date(annualYear, index + 1, 0, 12);
+    const totals = summarizePeriod(transactions, statements, loans,
+      { start: `${month}-01`, end: format(end, "yyyy-MM-dd") }, getToday());
+    return { name, Entradas: totals.income + totals.receivableInPeriod, Saídas: totals.expense + totals.payable };
+  }), [transactions, statements, loans, annualYear]);
 
   const annualTotals = useMemo(() => {
     return monthlyChartData.reduce(
@@ -1024,39 +842,39 @@ export default function DashboardPage() {
         </div>
 
         <div className={privateDataClass}>
-        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
-          <MetricCard
-            label="Disponível"
-            value={metrics.available}
-            icon={Wallet}
-            variant="default"
+        <div className="mt-4 space-y-4">
+          <BankBalanceOverview
+            balances={balances}
           />
 
-          <FlowMetricCard
-            income={metrics.income}
-            expense={metrics.expense}
-          />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <FlowMetricCard
+              income={metrics.income}
+              expense={metrics.expense}
+            />
 
-          <MetricCard
-            label="A receber"
-            value={metrics.receivable}
-            icon={Receipt}
-            variant="positive"
-          />
+            <MetricCard
+              label="A receber"
+              value={metrics.receivable}
+              detail={`Total pendente. ${formatCurrency(metrics.receivableInPeriod)} com previsão no período selecionado.`}
+              icon={Receipt}
+              variant="positive"
+            />
 
-          <MetricCard
-            label="A pagar"
-            value={metrics.payable}
-            icon={Clock}
-            variant={metrics.overdue > 0 ? "negative" : "warning"}
-            detail={
-              metrics.overdue > 0
-                ? `${formatCurrency(metrics.overdue)} em atraso`
-                : undefined
-            }
-          />
+            <MetricCard
+              label="A pagar"
+              value={metrics.payable}
+              icon={Clock}
+              variant={metrics.overdue > 0 ? "negative" : "warning"}
+              detail={
+                metrics.overdue > 0
+                  ? `${formatCurrency(metrics.overdue)} em atraso`
+                  : undefined
+              }
+            />
 
-          <CostOfLivingCard />
+            <CostOfLivingCard />
+          </div>
         </div>
 
         <div className="my-6 h-px bg-[#0D1B2A]/10" />
@@ -1066,16 +884,24 @@ export default function DashboardPage() {
       </section>
 
       <div className={[privateDataClass, "space-y-6"].join(" ")}>
-      <UpcomingObligations />
+
 
       <MonthlyClosingSection
         periodFilter={periodFilter}
         income={metrics.income}
-        receivable={metrics.receivable}
+        receivable={metrics.receivableInPeriod}
         expense={metrics.expense}
         payable={metrics.payable}
         budgetReserve={budgetReserve}
       />
+
+      <section className="space-y-6">
+        <SpendingCategoryChart
+          categoryData={categoryChartData}
+          periodFilter={periodFilter}
+          customStart={customStart}
+          customEnd={customEnd}
+        />
 
       <section className="rounded-2xl border border-[#0D1B2A]/10 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -1131,8 +957,8 @@ export default function DashboardPage() {
               ].join(" ")}
             >
               {annualTotals.income - annualTotals.expense >= 0
-                ? `Sobram ${formatCurrency(annualTotals.income - annualTotals.expense)}`
-                : `Faltam ${formatCurrency(Math.abs(annualTotals.income - annualTotals.expense))}`}
+                ? `Diferença: ${formatCurrency(annualTotals.income - annualTotals.expense)}`
+                : `Diferença: -${formatCurrency(Math.abs(annualTotals.income - annualTotals.expense))}`}
             </p>
           </div>
         </div>
@@ -1167,7 +993,7 @@ export default function DashboardPage() {
                 Entradas: {formatCurrency(month.Entradas)}
               </p>
               <p className="text-[11px] text-red-700">
-                A pagar/sair: {formatCurrency(month.Saídas)}
+                Saídas e pendências: {formatCurrency(month.Saídas)}
               </p>
             </div>
           ))}
@@ -1184,19 +1010,7 @@ export default function DashboardPage() {
         }
       />
 
-      <section className="grid grid-cols-1 items-stretch gap-6 xl:grid-cols-5">
-        <div className="xl:col-span-2">
-          <InvestmentOverview />
-        </div>
-
-        <div className="xl:col-span-3">
-          <SpendingCategoryChart
-            categoryData={categoryChartData}
-            periodFilter={periodFilter}
-            customStart={customStart}
-            customEnd={customEnd}
-          />
-        </div>
+      <InvestmentOverview />
       </section>
 
       </div>
@@ -1232,18 +1046,56 @@ function PeriodFilterControl({
   onCustomStartChange: (value: string) => void;
   onCustomEndChange: (value: string) => void;
 }) {
+  const [open, setOpen] = useState(false);
   const invalidCustomRange =
     value === "custom" &&
     Boolean(customStart) &&
     Boolean(customEnd) &&
     customStart > customEnd;
+  const selected = periods.find((period) => period.value === value)?.label ?? "Período";
+
+  const customInputs = (
+    <div className="grid grid-cols-2 gap-2">
+      <label className="space-y-1.5">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-[#3A3A3C]/55">De</span>
+        <input
+          type="date"
+          value={customStart}
+          onChange={(event) => onCustomStartChange(event.target.value)}
+          className="h-11 w-full rounded-xl border border-[#0D1B2A]/12 bg-white px-3 text-xs text-[#0D1B2A] outline-none focus:border-[#C8A15A]"
+        />
+      </label>
+      <label className="space-y-1.5">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-[#3A3A3C]/55">Até</span>
+        <input
+          type="date"
+          value={customEnd}
+          onChange={(event) => onCustomEndChange(event.target.value)}
+          className="h-11 w-full rounded-xl border border-[#0D1B2A]/12 bg-white px-3 text-xs text-[#0D1B2A] outline-none focus:border-[#C8A15A]"
+        />
+      </label>
+      {invalidCustomRange && (
+        <p className="col-span-2 text-xs text-red-600">
+          A data inicial precisa ser anterior ou igual à data final.
+        </p>
+      )}
+    </div>
+  );
 
   return (
     <div className="space-y-2">
-      <div className="flex max-w-full items-center gap-1 overflow-x-auto rounded-xl border border-[#0D1B2A]/10 bg-[#F7F5EF] p-1">
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="inline-flex h-10 items-center gap-2 rounded-xl border border-[#0D1B2A]/10 bg-[#F7F5EF] px-3 text-xs font-semibold text-[#0D1B2A] sm:hidden"
+      >
+        <SlidersHorizontal size={15} />
+        {selected}
+      </button>
+
+      <div className="hidden max-w-full items-center gap-1 overflow-x-auto rounded-xl border border-[#0D1B2A]/10 bg-[#F7F5EF] p-1 sm:flex app-scrollbar-none">
         {periods.map((period) => {
           const active = value === period.value;
-
           return (
             <button
               key={period.value}
@@ -1262,39 +1114,46 @@ function PeriodFilterControl({
         })}
       </div>
 
-      {value === "custom" && (
-        <div className="rounded-xl border border-[#0D1B2A]/10 bg-white p-3">
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <label className="space-y-1">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-[#3A3A3C]/55">
-                De
-              </span>
-              <input
-                type="date"
-                value={customStart}
-                onChange={(event) => onCustomStartChange(event.target.value)}
-                className="h-10 w-full rounded-lg border border-[#0D1B2A]/12 bg-white px-3 text-xs text-[#0D1B2A] outline-none focus:border-[#C8A15A]"
-              />
-            </label>
-            <label className="space-y-1">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-[#3A3A3C]/55">
-                Até
-              </span>
-              <input
-                type="date"
-                value={customEnd}
-                onChange={(event) => onCustomEndChange(event.target.value)}
-                className="h-10 w-full rounded-lg border border-[#0D1B2A]/12 bg-white px-3 text-xs text-[#0D1B2A] outline-none focus:border-[#C8A15A]"
-              />
-            </label>
-          </div>
-          {invalidCustomRange && (
-            <p className="mt-2 text-xs text-red-600">
-              A data inicial precisa ser anterior ou igual à data final.
-            </p>
-          )}
+      {value === "custom" && <div className="hidden sm:block">{customInputs}</div>}
+
+      <BottomSheet
+        open={open}
+        onClose={() => setOpen(false)}
+        title="Período do painel"
+        footer={
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className="app-primary-button w-full px-4"
+          >
+            Aplicar período
+          </button>
+        }
+      >
+        <div className="space-y-2">
+          {periods.map((period) => {
+            const active = value === period.value;
+            return (
+              <button
+                key={period.value}
+                type="button"
+                onClick={() => onChange(period.value)}
+                className={[
+                  "flex min-h-12 w-full items-center justify-between rounded-2xl border px-4 text-left text-sm font-semibold",
+                  active
+                    ? "border-[#0D1B2A] bg-[#0D1B2A] text-white"
+                    : "border-[#0D1B2A]/8 bg-white text-[#0D1B2A]",
+                ].join(" ")}
+              >
+                {period.label}
+                {active && <CheckCircle2 size={17} />}
+              </button>
+            );
+          })}
+
+          {value === "custom" && <div className="pt-3">{customInputs}</div>}
         </div>
-      )}
+      </BottomSheet>
     </div>
   );
 }

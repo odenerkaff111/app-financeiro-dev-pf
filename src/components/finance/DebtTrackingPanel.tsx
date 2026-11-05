@@ -196,10 +196,15 @@ function statusClasses(status: string) {
   return "bg-amber-50 text-amber-700";
 }
 
+function notifyFinancialDataChanged() {
+  const key = "pf:financial-data-version";
+  const current = Number(window.localStorage.getItem(key) ?? "0");
+  window.localStorage.setItem(key, String(Number.isFinite(current) ? current + 1 : 1));
+  window.dispatchEvent(new Event("pf:financial-data-changed"));
+}
+
 export function DebtTrackingPanel({
   group,
-  title,
-  description,
   emptyText,
 }: Props) {
   const { household, canWrite } = useHousehold();
@@ -271,7 +276,8 @@ export function DebtTrackingPanel({
   }, [group, household.id]);
 
   useEffect(() => {
-    void loadData();
+    const task = window.setTimeout(() => void loadData(), 0);
+    return () => window.clearTimeout(task);
   }, [loadData]);
 
   useEffect(() => {
@@ -337,8 +343,7 @@ export function DebtTrackingPanel({
 
     setSaving(false);
     await loadData();
-    window.localStorage.setItem("pf:financial-data-version", String(Date.now()));
-    window.dispatchEvent(new Event("pf:financial-data-changed"));
+    notifyFinancialDataChanged();
   }
 
   async function createDebt(event: FormEvent<HTMLFormElement>) {
@@ -446,8 +451,7 @@ export function DebtTrackingPanel({
     setShowNewDebt(false);
     await loadData();
 
-    window.localStorage.setItem("pf:financial-data-version", String(Date.now()));
-    window.dispatchEvent(new Event("pf:financial-data-changed"));
+    notifyFinancialDataChanged();
   }
 
   async function updateDebt(event: FormEvent<HTMLFormElement>) {
@@ -531,8 +535,7 @@ export function DebtTrackingPanel({
     setShowNewDebt(false);
     setEditingDebt(null);
     await loadData();
-    window.localStorage.setItem("pf:financial-data-version", String(Date.now()));
-    window.dispatchEvent(new Event("pf:financial-data-changed"));
+    notifyFinancialDataChanged();
   }
 
   async function deleteDebt() {
@@ -558,8 +561,7 @@ export function DebtTrackingPanel({
     setSaving(false);
     setDebtToDelete(null);
     await loadData();
-    window.localStorage.setItem("pf:financial-data-version", String(Date.now()));
-    window.dispatchEvent(new Event("pf:financial-data-changed"));
+    notifyFinancialDataChanged();
   }
 
   function openDebtAdjustment(debt: DebtProgress) {
@@ -613,8 +615,7 @@ export function DebtTrackingPanel({
     setSaving(false);
     setDebtToAdjust(null);
     await loadData();
-    window.localStorage.setItem("pf:financial-data-version", String(Date.now()));
-    window.dispatchEvent(new Event("pf:financial-data-changed"));
+    notifyFinancialDataChanged();
   }
 
   function openPayment(debt: DebtProgress) {
@@ -676,8 +677,7 @@ export function DebtTrackingPanel({
     setSelectedDebt(null);
     await loadData();
 
-    window.localStorage.setItem("pf:financial-data-version", String(Date.now()));
-    window.dispatchEvent(new Event("pf:financial-data-changed"));
+    notifyFinancialDataChanged();
   }
 
   const newDebtPreview = useMemo(() => {
@@ -707,29 +707,17 @@ export function DebtTrackingPanel({
 
   return (
     <div className="space-y-6 pb-10">
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#C8A15A]">
-            Dívidas
-          </p>
-          <h1 className="mt-2 text-3xl font-semibold text-[#0D1B2A] sm:text-4xl">
-            {title}
-          </h1>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-[#3A3A3C]/65">
-            {description}
-          </p>
-        </div>
-
+      <div className="flex justify-end">
         <button
           type="button"
           onClick={openNewDebt}
           disabled={!canWrite}
-          className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#0D1B2A] px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+          className="app-primary-button px-4 disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Plus size={16} />
           Nova dívida
         </button>
-      </header>
+      </div>
 
       {error && !selectedDebt && !showNewDebt && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -876,7 +864,7 @@ export function DebtTrackingPanel({
                     </p>
                   </div>
 
-                  <div className="flex flex-wrap items-center justify-end gap-2">
+                  <div className="flex min-w-0 flex-wrap items-center justify-start gap-2 sm:justify-end">
                     <button
                       type="button"
                       onClick={() => openEditDebt(debt)}
@@ -914,7 +902,7 @@ export function DebtTrackingPanel({
                         type="button"
                         onClick={() => openPayment(debt)}
                         disabled={accounts.length === 0}
-                        className="inline-flex h-9 items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-[#0D1B2A] px-3 text-xs font-semibold text-white disabled:opacity-50"
+                        className="inline-flex h-9 min-w-0 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-[#0D1B2A] px-3 text-xs font-semibold text-white disabled:opacity-50 sm:flex-none"
                       >
                         <WalletCards size={14} />
                         Registrar pagamento

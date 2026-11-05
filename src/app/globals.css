@@ -182,3 +182,56 @@ a {
     animation: none;
   }
 }
+/* Mobile app polish */
+.app-scrollbar-none {
+  scrollbar-width: none;
+}
+
+.app-scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+.app-toolbar {
+  border: 1px solid rgba(13, 27, 42, 0.08);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 10px 28px rgba(13, 27, 42, 0.055);
+  backdrop-filter: blur(16px);
+}
+
+.app-icon-button {
+  display: inline-flex;
+  min-height: 44px;
+  min-width: 44px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(13, 27, 42, 0.1);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--umso-navy);
+}
+
+.app-primary-button {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 14px;
+  background: var(--umso-navy);
+  color: white;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+@media (max-width: 767px) {
+  body {
+    overscroll-behavior-y: none;
+  }
+
+  .app-surface,
+  .app-card,
+  .app-card-dark {
+    border-radius: 18px;
+  }
+}

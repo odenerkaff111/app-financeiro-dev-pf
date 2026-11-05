@@ -608,20 +608,6 @@ export default function ConfiguracoesPage() {
 
   return (
     <div className="space-y-6 pb-10">
-      <header>
-        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#C8A15A]">
-          Configurações
-        </p>
-
-        <h1 className="mt-2 font-serif text-4xl font-semibold text-[#0D1B2A]">
-          Acesso e perfil
-        </h1>
-
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-[#3A3A3C]/65">
-          Gerencie seus dados pessoais e, como administrador, controle quem pode acessar as finanças da família.
-        </p>
-      </header>
-
       {error && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
@@ -638,8 +624,8 @@ export default function ConfiguracoesPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[240px_minmax(0,1fr)]">
-        <aside className="h-fit rounded-2xl border border-[#0D1B2A]/10 bg-white p-3 shadow-sm">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[220px_minmax(0,1fr)] lg:gap-6">
+        <aside className="flex h-fit gap-1 overflow-x-auto rounded-2xl border border-[#0D1B2A]/10 bg-white p-2 shadow-sm app-scrollbar-none lg:block lg:p-3">
           <button
             type="button"
             onClick={() =>
@@ -648,7 +634,7 @@ export default function ConfiguracoesPage() {
               )
             }
             className={[
-              "flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-semibold transition",
+              "flex min-h-11 min-w-max flex-1 items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-left text-xs font-semibold transition lg:w-full lg:justify-start lg:px-4 lg:py-3 lg:text-sm",
               activeSection ===
               "profile"
                 ? "bg-[#0D1B2A] text-white"
@@ -670,7 +656,7 @@ export default function ConfiguracoesPage() {
                 )
               }
               className={[
-                "mt-1 flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-semibold transition",
+                "flex min-h-11 min-w-max flex-1 items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-left text-xs font-semibold transition lg:mt-1 lg:w-full lg:justify-start lg:px-4 lg:py-3 lg:text-sm",
                 activeSection ===
                 "people"
                   ? "bg-[#0D1B2A] text-white"

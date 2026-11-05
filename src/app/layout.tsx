@@ -1,5 +1,6 @@
 import type {
   Metadata,
+  Viewport,
 } from "next";
 import {
   Cormorant_Garamond,
@@ -9,6 +10,7 @@ import "./globals.css";
 import {
   AppLayout,
 } from "@/components/AppLayout";
+import { PwaServiceWorkerRegistrar } from "@/components/pwa/PwaServiceWorkerRegistrar";
 
 const montserrat =
   Montserrat({
@@ -55,6 +57,15 @@ export const metadata:
     description:
       "Gestão financeira e patrimonial da família.",
 
+    manifest:
+      "/manifest.webmanifest",
+
+    appleWebApp: {
+      capable: true,
+      title: "Minhas Finanças",
+      statusBarStyle: "default",
+    },
+
     icons: {
       icon:
         "/brand/grupo-umso-icon.png",
@@ -63,8 +74,15 @@ export const metadata:
         "/brand/grupo-umso-icon.png",
 
       apple:
-        "/brand/grupo-umso-icon.png",
+        "/icons/apple-touch-icon.png",
     },
+  };
+
+
+export const viewport:
+  Viewport = {
+    themeColor:
+      "#0D1B2A",
   };
 
 export default function RootLayout({
@@ -81,6 +99,7 @@ export default function RootLayout({
       <body
         className={`${montserrat.variable} ${cormorantGaramond.variable}`}
       >
+        <PwaServiceWorkerRegistrar />
         <AppLayout>
           {children}
         </AppLayout>

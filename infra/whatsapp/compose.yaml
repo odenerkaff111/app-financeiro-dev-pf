@@ -1,0 +1,103 @@
+name: financeiro-whatsapp
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: evolution
+      POSTGRES_USER: evolution
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Execute setup.sh}
+    volumes:
+      - evolution_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U evolution -d evolution"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Execute setup.sh}
+    command: ["sh", "-c", "exec redis-server --appendonly yes --requirepass \"$${REDIS_PASSWORD}\""]
+    volumes:
+      - evolution_cache:/data
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=$$REDIS_PASSWORD redis-cli ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+  evolution:
+    # Official multi-platform v2.3.7 image, pinned to its index digest.
+    image: evoapicloud/evolution-api:v2.3.7@sha256:1bd8afc4a6cf48822e6cf02469aeae7bd35a12a6b616eacd1291926307f4d339
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      SERVER_TYPE: http
+      SERVER_PORT: "8080"
+      SERVER_URL: https://${EVOLUTION_DOMAIN:?Execute setup.sh}
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY:?Execute setup.sh}
+      AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES: "false"
+      DATABASE_ENABLED: "true"
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://evolution:${POSTGRES_PASSWORD}@postgres:5432/evolution?schema=public
+      DATABASE_CONNECTION_CLIENT_NAME: financeiro
+      DATABASE_SAVE_DATA_INSTANCE: "true"
+      DATABASE_SAVE_DATA_NEW_MESSAGE: "false"
+      DATABASE_SAVE_MESSAGE_UPDATE: "false"
+      DATABASE_SAVE_DATA_CONTACTS: "false"
+      DATABASE_SAVE_DATA_CHATS: "false"
+      DATABASE_SAVE_DATA_HISTORIC: "false"
+      DATABASE_SAVE_DATA_LABELS: "false"
+      CACHE_REDIS_ENABLED: "true"
+      CACHE_REDIS_URI: redis://:${REDIS_PASSWORD}@redis:6379/6
+      CACHE_REDIS_PREFIX_KEY: financeiro
+      CACHE_REDIS_SAVE_INSTANCES: "true"
+      CACHE_LOCAL_ENABLED: "false"
+      DEL_INSTANCE: "false"
+      RABBITMQ_ENABLED: "false"
+      WEBSOCKET_ENABLED: "false"
+      WEBHOOK_GLOBAL_ENABLED: "false"
+      TELEMETRY_ENABLED: "false"
+      CONFIG_SESSION_PHONE_CLIENT: Financeiro
+      CONFIG_SESSION_PHONE_NAME: Chrome
+      LANGUAGE: pt-BR
+      LOG_LEVEL: ERROR,WARN
+      LOG_BAILEYS: error
+    volumes:
+      - evolution_instances:/evolution/instances
+    expose: ["8080"]
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on: [evolution]
+    environment:
+      EVOLUTION_DOMAIN: ${EVOLUTION_DOMAIN:?Execute setup.sh}
+      TLS_EMAIL: ${TLS_EMAIL:?Execute setup.sh}
+    ports: ["80:80", "443:443", "443:443/udp"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+  worker:
+    image: node:22-alpine
+    restart: unless-stopped
+    user: node
+    read_only: true
+    environment:
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:?Execute setup.sh}
+      REMINDER_DISPATCH_SECRET: ${REMINDER_DISPATCH_SECRET:?Execute setup.sh}
+    volumes:
+      - ./worker.mjs:/app/worker.mjs:ro
+    command: ["node", "/app/worker.mjs"]
+    security_opt: ["no-new-privileges:true"]
+volumes:
+  evolution_db:
+  evolution_cache:
+  evolution_instances:
+  caddy_data:
+  caddy_config:

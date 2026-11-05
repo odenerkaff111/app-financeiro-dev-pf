@@ -17,7 +17,7 @@ export default function ClientesPage() {
   return null;
 }
 
-export function ClientesPageContent() {
+function ClientesPageContent() {
   const [clientes, setClientes] = useState<any[]>([]);
   const [produtos, setProdutos] = useState<any[]>([]);
   const [transacoes, setTransacoes] = useState<any[]>([]);
@@ -244,5 +244,6 @@ export function ClientesPageContent() {
     </div>
   );
 }
+
 
 

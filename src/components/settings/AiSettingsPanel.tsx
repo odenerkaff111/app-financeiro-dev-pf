@@ -1,10 +1,10 @@
 "use client";
+import {AiDiagnosticsPanel} from "./AiDiagnosticsPanel";
 
 import {
   Activity,
   BadgeDollarSign,
   BrainCircuit,
-  CheckCircle2,
   CircleGauge,
   KeyRound,
   Loader2,
@@ -47,6 +47,16 @@ type SettingsResponse = {
       usageMonthly: number;
     } | null;
   };
+};
+
+type GroqStatus = {
+  fallback?:{model:string;ready:boolean;configured:boolean;freeOnly:boolean};
+  langfuse?:{enabled:boolean;configured:boolean};
+  provider: string;
+  model: string;
+  apiKeyConfigured: boolean;
+  zdrAcknowledged: boolean;
+  ready: boolean;
 };
 
 type UsageResponse = {
@@ -152,6 +162,9 @@ export function AiSettingsPanel() {
     UsageResponse | null
   >(null);
 
+  const [groqStatus,setGroqStatus] = useState<GroqStatus | null>(null);
+  const [chatStatus,setChatStatus] = useState<{schemaReady:boolean;consultor:{provider:string;model:string;configured:boolean};vision:{model:string|null;configured:boolean}}|null>(null);
+
   const [
     model,
     setModel,
@@ -236,6 +249,8 @@ export function AiSettingsPanel() {
           const [
             settingsResponse,
             usageResponse,
+            groqResponse,
+            chatResponse,
           ] =
             await Promise.all([
               fetch(
@@ -257,6 +272,12 @@ export function AiSettingsPanel() {
                   },
                 },
               ),
+              fetch("/api/assistant/batch/status", {
+                headers: {Authorization:`Bearer ${accessToken}`},
+              }),
+              fetch(`/api/assistant/workspace/status?${query.toString()}`, {
+                headers: {Authorization:`Bearer ${accessToken}`},
+              }),
             ]);
 
           const settingsBody =
@@ -284,6 +305,13 @@ export function AiSettingsPanel() {
                 "Erro ao carregar consumo.",
             );
           }
+
+          if (groqResponse.ok) {
+            setGroqStatus(await groqResponse.json() as GroqStatus);
+          } else {
+            setGroqStatus(null);
+          }
+          if(chatResponse.ok)setChatStatus(await chatResponse.json());
 
           setSettings(
             settingsBody,
@@ -470,20 +498,6 @@ export function AiSettingsPanel() {
 
   return (
     <div className="space-y-6 pb-10">
-      <header>
-        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#C8A15A]">
-          Configurações
-        </p>
-
-        <h1 className="mt-2 text-3xl font-semibold text-[#0D1B2A]">
-          Inteligência Artificial
-        </h1>
-
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-[#3A3A3C]/65">
-          Controle o modelo usado pelo assistente e acompanhe o consumo deste aplicativo.
-        </p>
-      </header>
-
       {error && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
@@ -496,7 +510,31 @@ export function AiSettingsPanel() {
         </div>
       )}
 
+      <AiDiagnosticsPanel householdId={household.id}/>
+      <section className="rounded-2xl border border-[#0D1B2A]/10 bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-sm font-semibold text-[#0D1B2A]">Comandos financeiros em linguagem natural</h2>
+            <p className="mt-1 text-xs text-[#3A3A3C]/60">Groq · {groqStatus?.model ?? "GPT-OSS 120B"} · prévia obrigatória antes de gravar</p>
+          </div>
+          <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${groqStatus?.ready ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-800"}`}>
+            {groqStatus?.ready ? "Configurado" : "Configuração pendente"}
+          </span>
+        </div>
+        <p className="mt-3 text-xs leading-5 text-[#3A3A3C]/65">
+          Fallback: {groqStatus?.fallback?.ready?groqStatus.fallback.model+' via OpenRouter':'aguardando OPENROUTER_API_KEY no servidor'}. Langfuse externo: {groqStatus?.langfuse?.enabled?'configurado':'não configurado; traces salvas na Kyra'}.<br/>
+          As chaves ficam no servidor. Configure GROQ_API_KEY e habilite Zero Data Retention na Groq.
+          Só depois marque KYRA_GROQ_ZDR_ACKNOWLEDGED=true no ambiente. Essa declaração não verifica automaticamente a configuração do provedor.
+          Compras, faturas e transferências são propostas e validadas no banco antes de serem executadas.
+        </p>
+      </section>
+
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-2xl border border-[#0D1B2A]/10 bg-white p-5 md:col-span-2 xl:col-span-4">
+          <h2 className="text-sm font-semibold">Novo chat da Kyra</h2>
+          <p className="mt-2 text-xs leading-6 text-[#3A3A3C]/70">Conversas e anexos: {chatStatus?.schemaReady?'estrutura instalada':'instalação do SQL pendente'}. Consultor: {chatStatus?.consultor.configured?`${chatStatus.consultor.provider} · ${chatStatus.consultor.model}`:'configuração pendente'}. Leitura de fotos e PDF: {chatStatus?.vision.configured?chatStatus.vision.model:'configuração de visão pendente'}.</p>
+          <p className="mt-1 text-xs leading-5 text-[#3A3A3C]/60">O Registrar usa a configuração Groq acima. O Consultor e a leitura de imagens podem ter modelos próprios. Configuração presente não substitui um teste com o provedor.</p>
+        </div>
         <MetricCard
           label="Chamadas no mês"
           value={formatNumber(
@@ -526,7 +564,7 @@ export function AiSettingsPanel() {
         />
 
         <MetricCard
-          label="Chave"
+          label="Chave OpenRouter"
           value={
             settings?.keyInfo
               .configured
@@ -561,7 +599,7 @@ export function AiSettingsPanel() {
               </h2>
 
               <p className="text-xs text-[#3A3A3C]/55">
-                Provedor ativo: OpenRouter
+                OpenRouter: recomendações e configurações legadas
               </p>
             </div>
           </div>

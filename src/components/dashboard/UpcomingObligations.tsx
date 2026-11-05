@@ -20,6 +20,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { rows as readControlRows } from "@/lib/control/client";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { supabase } from "@/lib/supabase";
@@ -123,7 +124,7 @@ export function UpcomingObligations() {
   const [saving, setSaving] = useState(false);
   const [essentialSaving, setEssentialSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
   const [page, setPage] = useState(1);
 
   const loadData = useCallback(async () => {
@@ -131,15 +132,7 @@ export function UpcomingObligations() {
     setError(null);
 
     const [obligationsResult, accountsResult] = await Promise.all([
-      supabase
-        .from("pf_upcoming_obligations")
-        .select("*")
-        .eq("household_id", household.id)
-        .order("due_date", {
-          ascending: true,
-          nullsFirst: false,
-        })
-        .order("created_at", { ascending: true }),
+      readControlRows<Obligation>("pf_obligations_v2",household.id,"*","source_id").then(data=>({data:data.sort((a,b)=>(a.due_date??"9999").localeCompare(b.due_date??"9999")),error:null as {message:string}|null})).catch((error:{message:string})=>({data:[] as Obligation[],error})),
       supabase
         .from("pf_accounts")
         .select(
@@ -147,6 +140,7 @@ export function UpcomingObligations() {
         )
         .eq("household_id", household.id)
         .eq("is_active", true)
+        .in("type", ["checking","savings","cash","wallet"])
         .order("name"),
     ]);
 
@@ -166,7 +160,8 @@ export function UpcomingObligations() {
   }, [household.id]);
 
   useEffect(() => {
-    void loadData();
+    const task=setTimeout(()=>void loadData(),0);
+    return()=>clearTimeout(task);
   }, [loadData]);
 
   useEffect(() => {

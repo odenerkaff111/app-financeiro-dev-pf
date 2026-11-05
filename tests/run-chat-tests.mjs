@@ -1,0 +1,28 @@
+import fs from 'node:fs';
+import ts from 'typescript';
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+const require=createRequire(import.meta.url);
+function load(file,mocks={}){const module={exports:{}};const code=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;new Function('exports','module','require',code)(module.exports,module,id=>id in mocks?mocks[id]:require(id));return module.exports;}
+const finance=load('src/lib/family-finance.ts'),chat=load('src/lib/chat-workspace.ts',{'./family-finance':finance});
+const data={accounts:[{id:'bank',name:'Banco teste',type:'checking',account_scope:'personal',balance:1000,is_active:true},{id:'card',name:'Cartão pessoal',type:'credit_card',balance:200,available_credit:50,is_active:true},{id:'third',name:'Vanda',type:'credit_card',balance:9999,card_owner_type:'third_party',is_active:true},{id:'reserve',name:'Reserva',type:'investment',balance:300,is_active:true}],transactions:[],statements:[{id:'bill',account_id:'third',due_date:'2026-11-09',total_amount:300,paid_amount:50,remaining_amount:250}],categories:[],debts:[{id:'debt',creditor:'Vanda empréstimo',current_balance:8000}],loans:[],budgets:[],preferences:[],recurring:[]};
+const today='2026-11-01',view=finance.buildFamilyOverview(data,'2026-11',today);let count=0;
+const test=(name,fn)=>{fn();count++;console.log('OK '+name);};
+test('Cartão e investimento não entram no card de caixa',()=>{const c=chat.financialCard(view,'balances');assert.equal(c.rows.length,1);assert.equal(c.rows[0].value,100000);});
+test('Fatura Vanda vem de fatura, nunca de empréstimo',()=>{const c=chat.financialCard(view,'invoices');assert.equal(c.rows.length,1);assert.equal(c.rows[0].value,25000);assert.equal(c.rows[0].secondary,30000);assert(!JSON.stringify(c).includes('800000'));});
+test('Fatura mostra total pago e vencimento',()=>{const c=chat.financialCard(view,'invoices');assert.match(c.rows[0].detail,/09\/11\/2026/);assert.match(c.rows[0].detail,/50,00/);});
+test('Categoria vazia não inventa percentual nem valor',()=>assert.deepEqual(chat.financialCard(view,'categories').rows,[]));
+test('Fonte e período ficam no retrato do gráfico',()=>{const c=chat.financialCard(view,'cashflow','2026-11-01T12:00:00Z');assert.equal(c.asOf,'2026-11-01T12:00:00Z');assert.equal(c.period,'2026-11');});
+test('Meta conserva centavos e arredonda aporte para cima',()=>{const c=chat.simulateGoal(data,today,{target:100.01,saved:10,deadline:'2027-01-20'});assert.equal(c.goal.months,3);assert.equal(c.goal.remaining,9001);assert.equal(c.goal.monthly,3001);});
+test('Meta sem reserva explica a hipótese de zero',()=>{const c=chat.simulateGoal(data,today,{target:6000,deadline:'2027-01-20'});assert.equal(c.goal.saved,0);assert(c.notes.some(n=>n.includes('não informada')));});
+test('Meta não altera dados ou cria reserva',()=>{const before=JSON.stringify(data);chat.simulateGoal(data,today,{target:6000,deadline:'2027-01-20'});assert.equal(JSON.stringify(data),before);});
+test('Meta já coberta não sugere aporte negativo',()=>{const c=chat.simulateGoal(data,today,{target:100,saved:110,deadline:'2027-01-20'});assert.equal(c.goal.monthly,0);assert.equal(c.goal.progress,100);});
+for(const target of [0,-1,NaN,Infinity,1000001])test('Meta inválida recusada: '+target,()=>assert.throws(()=>chat.simulateGoal(data,today,{target,deadline:'2027-01-20'})));
+test('Data impossível recusada',()=>assert.throws(()=>chat.simulateGoal(data,today,{target:100,deadline:'2027-02-30'})));
+test('Data passada recusada',()=>assert.throws(()=>chat.simulateGoal(data,today,{target:100,deadline:'2026-10-20'})));
+test('Horizonte maior que 24 meses recusado',()=>assert.throws(()=>chat.simulateGoal(data,today,{target:100,deadline:'2030-01-20'})));
+test('Compra não é registrada ao comparar cenário',()=>{const before=JSON.stringify(data);const c=chat.purchaseScenario(view,150,'2026-11-02','debit');assert.equal(JSON.stringify(data),before);assert.equal(c.rows[1].value-c.rows[2].value,15000);});
+test('Crédito não vira saída imediata em cenário',()=>{const c=chat.purchaseScenario(view,150,'2026-11-02','credit');assert.equal(c.rows[1].value,c.rows[2].value);assert(c.notes.some(n=>n.includes('vencimento')));});
+test('Tipo de arquivo confere extensão e mídia',()=>{assert.equal(chat.fileKind('comprovante.jpg','image/jpeg'),'image');assert.equal(chat.fileKind('fatura.pdf','application/pdf'),'pdf');assert.equal(chat.fileKind('extrato.csv','text/csv'),'statement');assert.throws(()=>chat.fileKind('arquivo.html','text/html'));assert.throws(()=>chat.fileKind('foto.png','application/javascript'));});
+test('Ferramenta não aceita array como parâmetros',()=>assert.throws(()=>chat.parseToolArgs('[]')));
+console.log(`${count} testes do chat passaram.`);
