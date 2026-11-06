@@ -1,237 +1,92 @@
 @import "tailwindcss";
 
 :root {
-  --umso-navy: #0d1b2a;
-  --umso-gold: #c8a15a;
-  --umso-ivory: #f7f5ef;
-  --umso-graphite: #3a3a3c;
-
-  --background: var(--umso-ivory);
-  --foreground: var(--umso-navy);
+  --umso-navy:#182331;
+  --umso-gold:#c8a15a;
+  --umso-ivory:#f5f6f8;
+  --umso-graphite:#344254;
+  --kyra-surface:#ffffff;
+  --kyra-line:#e7ebf1;
+  --kyra-muted:#778392;
+  --kyra-gold-ink:#866126;
+  --kyra-gold-soft:#fbf6eb;
+  --kyra-violet:#6558e8;
+  --background:var(--umso-ivory);
+  --foreground:var(--umso-navy);
 }
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-
-  --font-sans: var(--font-montserrat);
-  --font-serif: var(--font-cormorant);
+  --color-background:var(--background);
+  --color-foreground:var(--foreground);
+  --font-sans:var(--font-montserrat);
+  --font-serif:var(--font-cormorant);
 }
+*{box-sizing:border-box}
+html{min-height:100%;background:var(--background);scroll-behavior:smooth}
+body{min-height:100vh;margin:0;background:var(--background);color:var(--foreground);font-family:var(--font-montserrat),Arial,Helvetica,sans-serif;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased}
+h1,h2,h3,h4{font-family:var(--font-montserrat),Arial,sans-serif;font-weight:600;letter-spacing:-.035em}
+h1{font-size:clamp(24px,2.5vw,31px);line-height:1.25}
+h2{line-height:1.35}h3,h4{line-height:1.45}
+.font-brand-serif{font-family:var(--font-cormorant),Georgia,serif}
+input,button,textarea,select{font:inherit}
+button,a{-webkit-tap-highlight-color:transparent}
+button:not(:disabled),summary{cursor:pointer}
+button:disabled{cursor:default}
+button:focus-visible,a:focus-visible,summary:focus-visible{outline:2px solid var(--umso-gold);outline-offset:3px}
+input[type=checkbox],input[type=radio]{accent-color:var(--kyra-gold-ink)}
+::selection{background:#c8a15a38;color:var(--umso-navy)}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{border:2px solid var(--background);border-radius:20px;background:#bec6d0}
+::-webkit-scrollbar-thumb:hover{background:#99a6b6}
 
-* {
-  box-sizing: border-box;
+.app-surface,.app-card{border:1px solid var(--kyra-line);border-radius:19px;background:var(--kyra-surface);box-shadow:0 2px 7px #18233103;backdrop-filter:none}
+.app-card-dark{border:1px solid #243546;border-top:3px solid var(--umso-gold);border-radius:19px;background:var(--umso-navy);color:white;box-shadow:none}
+.app-eyebrow{color:var(--kyra-gold-ink);font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase}
+.app-title{color:var(--umso-navy);font-family:var(--font-montserrat),Arial,sans-serif;font-size:clamp(24px,2.5vw,31px);font-weight:650;letter-spacing:-.045em;line-height:1.25}
+.app-divider{height:1px;background:var(--kyra-line)}
+.app-scrollbar-none{scrollbar-width:none}.app-scrollbar-none::-webkit-scrollbar{display:none}
+.app-toolbar{border:1px solid var(--kyra-line);border-radius:15px;background:white;box-shadow:none;backdrop-filter:none}
+.app-icon-button{display:inline-flex;min-height:42px;min-width:42px;align-items:center;justify-content:center;border:1px solid var(--kyra-line);border-radius:11px;background:white;color:var(--umso-navy)}
+.app-primary-button{display:inline-flex;min-height:44px;align-items:center;justify-content:center;gap:.5rem;border:1px solid var(--umso-navy);border-radius:11px;background:var(--umso-navy);color:white;font-size:13px;font-weight:600}
+.app-primary-button svg{color:var(--umso-gold)}
+.kyra-app-shell{background:var(--background);color:var(--foreground)}
+.kyra-content{font-size:13px}
+.kyra-content :is(.app-surface,.app-card,section[class*="bg-white"]){border-color:var(--kyra-line);box-shadow:none;background-color:white}
+.kyra-content :is(.shadow-sm,.shadow-lg,.shadow-xl){box-shadow:0 3px 14px #18233105}
+.kyra-content :is([class~="bg-[#F7F5EF]"],[class~="bg-[#F7F5EF]/70"],[class~="bg-slate-50"],[class~="bg-gray-50"]){background-color:#f7f8fb}
+.kyra-content :is([class~="border-[#C8A15A]/20"],[class~="border-[#C8A15A]/25"],[class~="border-[#0D1B2A]/10"],[class~="border-gray-200"],[class~="border-slate-200"]){border-color:var(--kyra-line)}
+.kyra-content :is(button,a)[class*="bg-[#0D1B2A]"]{background-color:var(--umso-navy);border-radius:11px}
+.kyra-content :is(button,a)[class*="bg-[#0D1B2A]"] svg{color:#e4c58b}
+.kyra-content :is(button,a)[class~="bg-amber-500"]{background:var(--umso-navy);color:white;border-radius:11px}
+.kyra-content :is(button,a)[class~="bg-amber-500"]:hover{background:#26384c}
+.kyra-content :is(input:not([type=checkbox],[type=radio],[type=range],[type=color]),select,textarea){border-color:#dce2e9;border-radius:10px;color:var(--umso-navy)}
+.kyra-content :is(input,select,textarea):focus-visible{outline:2px solid #c8a15a70;outline-offset:1px;border-color:var(--umso-gold);--tw-ring-color:#c8a15a25}
+.kyra-content label{color:#536174}
+.kyra-content :is(thead,thead tr){background:#f7f8fb}
+.kyra-content th{color:#788493;font-size:10px;font-weight:600;letter-spacing:.03em;text-transform:none}
+.kyra-content td{font-size:12px;border-color:var(--kyra-line)}
+.kyra-content tbody tr{border-color:var(--kyra-line)}
+.kyra-content tbody tr:hover{background:#fafbfc}
+.kyra-content [class~="fixed"][class~="inset-0"]{z-index:150}
+.kyra-content :is([role=dialog],dialog){border-color:var(--kyra-line);border-radius:19px}
+.kyra-content nav a[aria-current=page]{box-shadow:inset 0 -2px 0 var(--umso-gold)}
+.kyra-chat-shell{position:fixed;inset:0;overflow:hidden;background:var(--background);color:var(--foreground)}
+.kyra-chat-viewport{position:absolute;inset:70px 0 0;min-height:0}
+
+@keyframes page-route-enter{from{opacity:0}to{opacity:1}}
+.page-route-enter{animation:page-route-enter 180ms ease-out both}
+@media(max-width:767px){
+  body{overscroll-behavior-y:none}
+  .app-surface,.app-card,.app-card-dark{border-radius:17px}
+  .kyra-content{font-size:13px}
+  .kyra-chat-viewport{inset:56px 0 calc(58px + max(env(safe-area-inset-bottom),.35rem))}
 }
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.page-route-enter{animation:none}}
 
-html {
-  min-height: 100%;
-  background: var(--umso-ivory);
-  scroll-behavior: smooth;
-}
+/* Authentication uses the same white/gold system without changing its flow. */
+main[class~="bg-[#F7F5EF]"]{background:var(--background)}
+main[class~="min-h-screen"]>.pointer-events-none{display:none}
+main[class~="min-h-screen"]>div[class~="bg-white"]{border-color:var(--kyra-line);border-radius:23px;box-shadow:0 12px 45px #1823310a}
+main .font-serif{font-family:var(--font-montserrat),Arial,sans-serif}
 
-body {
-  min-height: 100vh;
-  margin: 0;
-  background:
-    radial-gradient(
-      circle at 10% 8%,
-      rgba(200, 161, 90, 0.08),
-      transparent 28%
-    ),
-    var(--umso-ivory);
-  color: var(--umso-navy);
-  font-family:
-    var(--font-montserrat),
-    Montserrat,
-    Arial,
-    Helvetica,
-    sans-serif;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-}
-
-h1,
-h2,
-h3,
-h4,
-.font-brand-serif {
-  font-family:
-    var(--font-cormorant),
-    "Cormorant Garamond",
-    Georgia,
-    serif;
-}
-
-input,
-button,
-textarea,
-select {
-  font: inherit;
-}
-
-button,
-a {
-  -webkit-tap-highlight-color: transparent;
-}
-
-::selection {
-  background: rgba(200, 161, 90, 0.32);
-  color: var(--umso-navy);
-}
-
-::-webkit-scrollbar {
-  width: 9px;
-  height: 9px;
-}
-
-::-webkit-scrollbar-track {
-  background: var(--umso-ivory);
-}
-
-::-webkit-scrollbar-thumb {
-  border: 2px solid var(--umso-ivory);
-  border-radius: 999px;
-  background: rgba(13, 27, 42, 0.24);
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(13, 27, 42, 0.4);
-}
-
-.app-surface {
-  border: 1px solid rgba(200, 161, 90, 0.22);
-  border-radius: 24px;
-  background: rgba(255, 255, 255, 0.74);
-  box-shadow:
-    0 22px 70px rgba(13, 27, 42, 0.07),
-    inset 0 1px 0 rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(18px);
-}
-
-.app-card {
-  border: 1px solid rgba(13, 27, 42, 0.09);
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.86);
-  box-shadow: 0 12px 35px rgba(13, 27, 42, 0.06);
-}
-
-.app-card-dark {
-  border: 1px solid rgba(200, 161, 90, 0.26);
-  border-radius: 20px;
-  background:
-    linear-gradient(
-      145deg,
-      rgba(20, 39, 58, 0.98),
-      rgba(13, 27, 42, 1)
-    );
-  color: var(--umso-ivory);
-  box-shadow: 0 18px 50px rgba(13, 27, 42, 0.22);
-}
-
-.app-eyebrow {
-  color: var(--umso-gold);
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.25em;
-  text-transform: uppercase;
-}
-
-.app-title {
-  color: var(--umso-navy);
-  font-family:
-    var(--font-cormorant),
-    "Cormorant Garamond",
-    Georgia,
-    serif;
-  font-size: clamp(2rem, 4vw, 3.2rem);
-  font-weight: 600;
-  letter-spacing: -0.025em;
-  line-height: 0.96;
-}
-
-.app-divider {
-  height: 1px;
-  background:
-    linear-gradient(
-      90deg,
-      rgba(200, 161, 90, 0),
-      rgba(200, 161, 90, 0.72),
-      rgba(200, 161, 90, 0)
-    );
-}
-
-@keyframes page-route-enter {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
-}
-
-.page-route-enter {
-  animation: page-route-enter 220ms ease-out both;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  html {
-    scroll-behavior: auto;
-  }
-
-  .page-route-enter {
-    animation: none;
-  }
-}
-/* Mobile app polish */
-.app-scrollbar-none {
-  scrollbar-width: none;
-}
-
-.app-scrollbar-none::-webkit-scrollbar {
-  display: none;
-}
-
-.app-toolbar {
-  border: 1px solid rgba(13, 27, 42, 0.08);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 10px 28px rgba(13, 27, 42, 0.055);
-  backdrop-filter: blur(16px);
-}
-
-.app-icon-button {
-  display: inline-flex;
-  min-height: 44px;
-  min-width: 44px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid rgba(13, 27, 42, 0.1);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.94);
-  color: var(--umso-navy);
-}
-
-.app-primary-button {
-  display: inline-flex;
-  min-height: 44px;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  border-radius: 14px;
-  background: var(--umso-navy);
-  color: white;
-  font-size: 0.875rem;
-  font-weight: 600;
-}
-
-@media (max-width: 767px) {
-  body {
-    overscroll-behavior-y: none;
-  }
-
-  .app-surface,
-  .app-card,
-  .app-card-dark {
-    border-radius: 18px;
-  }
-}
+@media(max-width:767px){.kyra-content button[class~="flex-1"][class~="whitespace-nowrap"]{min-width:max-content}}

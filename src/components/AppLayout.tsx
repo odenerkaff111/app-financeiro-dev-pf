@@ -353,18 +353,17 @@ function AuthenticatedShell({
 
   if (pathname === '/assistente') {
     return (
-      <main className="fixed inset-0 overflow-hidden bg-[#F7F5EF] text-[#0D1B2A]">
-        <section className="absolute inset-x-0 bottom-0 top-0 md:top-[70px] min-h-0">
+      <main className="kyra-chat-shell">
+        <section className="kyra-chat-viewport">
           {children}
         </section>
-        <div className="hidden md:block"><AppDock /></div>
+        <AppDock />
       </main>
     );
   }
 
   return (
-    <main className="relative min-h-screen overflow-x-hidden bg-[#F7F5EF] text-[#0D1B2A]">
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_12%_10%,rgba(200,161,90,0.08),transparent_27%),radial-gradient(circle_at_92%_90%,rgba(13,27,42,0.05),transparent_30%)]" />
+    <main className="kyra-app-shell relative min-h-screen overflow-x-hidden">
 
       <DailyFinanceGate>
       <section className="relative mx-auto w-full max-w-[1600px] px-3 pb-28 pt-20 sm:px-6 md:pb-12 md:pt-28 lg:px-8">
@@ -383,7 +382,7 @@ function AuthenticatedShell({
 
         <div
           key={`${pathname}-${financialDataVersion}`}
-          className="page-route-enter min-w-0"
+          className="kyra-content page-route-enter min-w-0"
         >
           {children}
         </div>
